@@ -112,6 +112,7 @@ jobs:
           pip install aws-cdk-lib constructs boto3
           pip install -r infrastructure/requirements.txt
           npm install -g aws-cdk
+          bash scripts/build-layer.sh
           cd infrastructure && cdk synth -c env=dev --quiet
 
   # ============================================================================
