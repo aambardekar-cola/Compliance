@@ -103,6 +103,31 @@ class ApiClient {
             body: JSON.stringify(data),
         });
     }
+
+    // Admin URLs
+    getAdminUrls() {
+        return this.request('/admin/urls');
+    }
+
+    createAdminUrl(data) {
+        return this.request('/admin/urls', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    updateAdminUrl(id, data) {
+        return this.request(`/admin/urls/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    }
+
+    deleteAdminUrl(id) {
+        return this.request(`/admin/urls/${id}`, {
+            method: 'DELETE',
+        });
+    }
 }
 
 export const apiClient = new ApiClient();

@@ -97,6 +97,24 @@ class Tenant(Base):
     communications = relationship("Communication", back_populates="tenant")
 
 
+class ComplianceRuleUrl(Base):
+    """Admin-configured URL source for compliance rules."""
+    __tablename__ = "compliance_rule_urls"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    url = Column(String(2000), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_comp_urls_active", "is_active"),
+    )
+
+
 class Regulation(Base):
     """A tracked regulatory document or rule."""
     __tablename__ = "regulations"

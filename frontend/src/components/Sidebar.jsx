@@ -1,4 +1,5 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
+import { useAuthSession } from '../auth/AuthProvider';
 import {
     LayoutDashboard,
     FileText,
@@ -7,6 +8,7 @@ import {
     BarChart3,
     Settings,
     Shield,
+    Globe,
 } from 'lucide-react';
 
 const navItems = [
@@ -39,6 +41,9 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+    const { user } = useAuthSession();
+    const isInternalAdmin = user?.role === 'INTERNAL_ADMIN';
+
     return (
         <aside className="sidebar">
             <div className="sidebar-logo">
@@ -70,6 +75,19 @@ export default function Sidebar() {
                         ))}
                     </div>
                 ))}
+
+                {isInternalAdmin && (
+                    <div>
+                        <div className="sidebar-section">Admin</div>
+                        <NavLink
+                            to="/admin/urls"
+                            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                        >
+                            <Globe />
+                            <span>Compliance Sources</span>
+                        </NavLink>
+                    </div>
+                )}
             </nav>
         </aside>
     );

@@ -9,7 +9,7 @@ from mangum import Mangum
 from shared.config import get_settings
 from shared.db import init_db, close_db
 from api.middleware.auth import AuthMiddleware
-from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions
+from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin
 
 # ---- Logging ----
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +48,7 @@ app.include_router(gaps.router, prefix="/api", tags=["Gap Analysis"])
 app.include_router(communications.router, prefix="/api", tags=["Communications"])
 app.include_router(reports.router, prefix="/api", tags=["Reports"])
 app.include_router(subscriptions.router, prefix="/api", tags=["Subscriptions"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 
 # ---- Lifecycle Events ----
