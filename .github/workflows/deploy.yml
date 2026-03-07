@@ -165,9 +165,9 @@ jobs:
   # ============================================================================
   deploy-staging:
     name: Deploy Staging
-    needs: [deploy-dev]
+    needs: [build]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
     environment:
       name: staging
     steps:
@@ -211,7 +211,7 @@ jobs:
     name: Deploy Demo
     needs: [build]
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'demo'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'demo')
     environment:
       name: demo
     steps:
@@ -253,7 +253,7 @@ jobs:
   # ============================================================================
   deploy-prod:
     name: Deploy Production
-    needs: [deploy-staging]
+    needs: [build]
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
     environment:
