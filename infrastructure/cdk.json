@@ -23,7 +23,7 @@
         "aurora_min_capacity": 0.5,
         "aurora_max_capacity": 2,
         "nat_gateways": 1,
-        "descope_project_id": ""
+        "descope_project_id": "P31bVjWpMwOtVB9iv4nNa8prlR5e"
       },
       "staging": {
         "app_name": "pco-compliance-staging",
@@ -31,7 +31,7 @@
         "aurora_min_capacity": 0.5,
         "aurora_max_capacity": 4,
         "nat_gateways": 1,
-        "descope_project_id": ""
+        "descope_project_id": "P31bVjWpMwOtVB9iv4nNa8prlR5e"
       },
       "prod": {
         "app_name": "pco-compliance-prod",

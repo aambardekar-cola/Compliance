@@ -1,0 +1,278 @@
+# ==============================================================================
+# PaceCareOnline Compliance Intelligence Platform — GitHub Actions CI/CD
+# ==============================================================================
+# Triggers: push to main (dev + staging auto-deploy), manual dispatch (prod)
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_REGION              (default: us-east-2)
+# ==============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+# Prevent concurrent deployments
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ============================================================================
+  # LINT
+  # ============================================================================
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff
+      - run: ruff check backend/
+    continue-on-error: true
+
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: cd frontend && npm ci --no-audit --no-fund
+      - run: cd frontend && npx eslint src/ --max-warnings=0 || true
+    continue-on-error: true
+
+  # ============================================================================
+  # BUILD
+  # ============================================================================
+  build:
+    name: Build & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Backend validation
+      - name: Validate backend
+        run: |
+          pip install -r backend/requirements.txt
+          cd backend
+          python -c "from shared.config import Settings; print('Config OK')"
+          python -c "from shared.models import Base; print('Models OK')"
+
+      # Frontend build
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+      # CDK synth
+      - name: CDK synth (validate)
+        run: |
+          pip install aws-cdk-lib constructs boto3
+          pip install -r infrastructure/requirements.txt
+          npm install -g aws-cdk
+          cd infrastructure && cdk synth -c env=dev --quiet
+
+  # ============================================================================
+  # DEPLOY: Dev (automatic on push to main)
+  # ============================================================================
+  deploy-dev:
+    name: Deploy Dev
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    environment:
+      name: dev
+      url: https://${{ vars.CLOUDFRONT_DOMAIN || 'd3jihfnah0dz1u.cloudfront.net' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          pip install aws-cdk-lib constructs boto3
+          pip install -r infrastructure/requirements.txt
+          npm install -g aws-cdk
+          bash scripts/build-layer.sh
+
+      - name: CDK Deploy
+        run: |
+          cd infrastructure
+          cdk deploy --all -c env=dev --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Run DB migrations
+        run: bash scripts/run-migrations.sh dev
+
+      - name: Invalidate CloudFront cache
+        run: bash scripts/invalidate-cache.sh dev
+
+  # ============================================================================
+  # DEPLOY: Staging (automatic on push to main, after dev)
+  # ============================================================================
+  deploy-staging:
+    name: Deploy Staging
+    needs: [deploy-dev]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          pip install aws-cdk-lib constructs boto3
+          pip install -r infrastructure/requirements.txt
+          npm install -g aws-cdk
+          bash scripts/build-layer.sh
+
+      - name: CDK Deploy
+        run: |
+          cd infrastructure
+          cdk deploy --all -c env=staging --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Run DB migrations
+        run: bash scripts/run-migrations.sh staging
+
+      - name: Invalidate CloudFront cache
+        run: bash scripts/invalidate-cache.sh staging
+
+  # ============================================================================
+  # DEPLOY: Production (manual trigger only)
+  # ============================================================================
+  deploy-prod:
+    name: Deploy Production
+    needs: [deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          pip install aws-cdk-lib constructs boto3
+          pip install -r infrastructure/requirements.txt
+          npm install -g aws-cdk
+          bash scripts/build-layer.sh
+
+      - name: CDK Deploy
+        run: |
+          cd infrastructure
+          cdk deploy --all -c env=prod --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Run DB migrations
+        run: bash scripts/run-migrations.sh prod
+
+      - name: Invalidate CloudFront cache
+        run: bash scripts/invalidate-cache.sh prod
