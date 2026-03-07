@@ -1,0 +1,46 @@
+{
+  "app": "python3 app.py",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "requirements*.txt",
+      "source.bat",
+      "**/__pycache__",
+      "tests"
+    ]
+  },
+  "context": {
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:target-partitions": ["aws"],
+    "aws_region": "us-east-2",
+    "environments": {
+      "dev": {
+        "app_name": "pco-compliance-dev",
+        "log_level": "DEBUG",
+        "aurora_min_capacity": 0.5,
+        "aurora_max_capacity": 2,
+        "nat_gateways": 1,
+        "descope_project_id": ""
+      },
+      "staging": {
+        "app_name": "pco-compliance-staging",
+        "log_level": "INFO",
+        "aurora_min_capacity": 0.5,
+        "aurora_max_capacity": 4,
+        "nat_gateways": 1,
+        "descope_project_id": ""
+      },
+      "prod": {
+        "app_name": "pco-compliance-prod",
+        "log_level": "WARN",
+        "aurora_min_capacity": 1,
+        "aurora_max_capacity": 8,
+        "nat_gateways": 2,
+        "descope_project_id": ""
+      }
+    }
+  }
+}

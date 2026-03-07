@@ -1,0 +1,180 @@
+# ==============================================================================
+# PaceCareOnline Compliance Intelligence Platform — GitLab CI/CD Pipeline
+# ==============================================================================
+# Stages: lint → build → deploy (dev → staging → prod)
+#
+# Required GitLab CI/CD Variables (Settings → CI/CD → Variables):
+#   AWS_ACCESS_KEY_ID          (per environment)
+#   AWS_SECRET_ACCESS_KEY      (per environment)
+#   AWS_DEFAULT_REGION         (default: us-east-1)
+#   DESCOPE_PROJECT_ID         (per environment)
+# ==============================================================================
+
+stages:
+  - lint
+  - build
+  - deploy
+
+# --------------- Global defaults ---------------
+default:
+  image: node:20-slim
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm-cache"
+
+# --------------- Cache templates ---------------
+.pip-cache: &pip-cache
+  cache:
+    key: pip-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .pip-cache/
+
+.npm-cache: &npm-cache
+  cache:
+    key: npm-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .npm-cache/
+      - frontend/node_modules/
+
+# --------------- Reusable deploy template ---------------
+.deploy-template: &deploy-template
+  image: python:3.12-slim
+  <<: *pip-cache
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq nodejs npm curl > /dev/null 2>&1
+    - pip install --quiet aws-cdk-lib constructs boto3
+    - pip install --quiet -r infrastructure/requirements.txt
+    - npm install --prefix frontend --no-audit --no-fund --loglevel=error
+    - npm run build --prefix frontend
+    - npm install -g aws-cdk
+    - bash scripts/build-layer.sh
+  script:
+    - cd infrastructure
+    - cdk synth -c env=$DEPLOY_ENV --quiet
+    - cdk deploy --all -c env=$DEPLOY_ENV --require-approval never --outputs-file cdk-outputs.json
+    - cd ..
+    - bash scripts/invalidate-cache.sh $DEPLOY_ENV
+    - bash scripts/run-migrations.sh $DEPLOY_ENV
+
+# ==============================================================================
+# STAGE: lint
+# ==============================================================================
+
+lint:python:
+  stage: lint
+  image: python:3.12-slim
+  <<: *pip-cache
+  before_script:
+    - pip install --quiet ruff
+  script:
+    - ruff check backend/ --output-format=gitlab
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+lint:frontend:
+  stage: lint
+  <<: *npm-cache
+  before_script:
+    - cd frontend && npm ci --no-audit --no-fund --loglevel=error
+  script:
+    - npx eslint src/ --max-warnings=0 || true
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ==============================================================================
+# STAGE: build
+# ==============================================================================
+
+build:frontend:
+  stage: build
+  <<: *npm-cache
+  before_script:
+    - cd frontend && npm ci --no-audit --no-fund --loglevel=error
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist/
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:backend-validate:
+  stage: build
+  image: python:3.12-slim
+  <<: *pip-cache
+  script:
+    - pip install --quiet -r backend/requirements.txt
+    - python -c "from shared.config import Settings; print('Config OK')"
+    - python -c "from shared.models import Base; print('Models OK')"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:cdk-synth:
+  stage: build
+  image: python:3.12-slim
+  <<: *pip-cache
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq nodejs npm > /dev/null 2>&1
+    - pip install --quiet aws-cdk-lib constructs boto3
+    - pip install --quiet -r infrastructure/requirements.txt
+    - npm install -g aws-cdk
+  script:
+    - cd infrastructure
+    - cdk synth -c env=dev --quiet
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ==============================================================================
+# STAGE: deploy
+# ==============================================================================
+
+deploy:dev:
+  stage: deploy
+  <<: *deploy-template
+  variables:
+    DEPLOY_ENV: dev
+  environment:
+    name: dev
+    url: https://$DEV_CLOUDFRONT_DOMAIN
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs:
+    - build:frontend
+    - build:backend-validate
+    - build:cdk-synth
+
+deploy:staging:
+  stage: deploy
+  <<: *deploy-template
+  variables:
+    DEPLOY_ENV: staging
+  environment:
+    name: staging
+    url: https://$STAGING_CLOUDFRONT_DOMAIN
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs:
+    - deploy:dev
+
+deploy:prod:
+  stage: deploy
+  <<: *deploy-template
+  variables:
+    DEPLOY_ENV: prod
+  environment:
+    name: production
+    url: https://$PROD_CLOUDFRONT_DOMAIN
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  needs:
+    - deploy:staging

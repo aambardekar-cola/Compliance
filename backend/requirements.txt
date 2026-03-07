@@ -1,0 +1,31 @@
+# Backend Dependencies
+# ====================
+
+# Web framework
+fastapi>=0.115.0
+mangum>=0.19.0          # Lambda adapter for ASGI
+uvicorn>=0.34.0         # Local dev server
+
+# Database
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30.0         # Async PostgreSQL driver
+alembic>=1.14.0         # Database migrations
+
+# Auth
+descope>=1.6.0          # Descope Python SDK
+pyjwt[crypto]>=2.10.0   # JWT token handling
+
+# AWS integrations
+boto3>=1.35.0
+botocore>=1.35.0
+
+# Data validation
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+
+# HTTP client
+httpx>=0.28.0           # Async HTTP client for API calls
+
+# Utilities
+python-dateutil>=2.9.0
+structlog>=24.4.0       # Structured logging
