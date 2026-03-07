@@ -23,6 +23,7 @@ on:
         options:
           - dev
           - staging
+          - demo
           - prod
 
 # Prevent concurrent deployments
@@ -125,48 +126,37 @@ jobs:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
     environment:
       name: dev
-      url: https://${{ vars.CLOUDFRONT_DOMAIN || 'd3jihfnah0dz1u.cloudfront.net' }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Download frontend dist
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist
           path: frontend/dist/
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Install dependencies
         run: |
           pip install aws-cdk-lib constructs boto3
           pip install -r infrastructure/requirements.txt
           npm install -g aws-cdk
           bash scripts/build-layer.sh
-
-      - name: CDK Deploy
+      - name: CDK Deploy Explicit Descope Config
         run: |
           cd infrastructure
-          cdk deploy --all -c env=dev --require-approval never --outputs-file cdk-outputs.json
-
+          cdk deploy --all -c env=dev -c "environments:dev:descope_project_id=${{ secrets.DESCOPE_PROJECT_ID_DEV }}" --require-approval never --outputs-file cdk-outputs.json
       - name: Run DB migrations
         run: bash scripts/run-migrations.sh dev
-
       - name: Invalidate CloudFront cache
         run: bash scripts/invalidate-cache.sh dev
 
@@ -182,47 +172,81 @@ jobs:
       name: staging
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Download frontend dist
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist
           path: frontend/dist/
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Install dependencies
         run: |
           pip install aws-cdk-lib constructs boto3
           pip install -r infrastructure/requirements.txt
           npm install -g aws-cdk
           bash scripts/build-layer.sh
-
-      - name: CDK Deploy
+      - name: CDK Deploy Explicit Descope Config
         run: |
           cd infrastructure
-          cdk deploy --all -c env=staging --require-approval never --outputs-file cdk-outputs.json
-
+          cdk deploy --all -c env=staging -c "environments:staging:descope_project_id=${{ secrets.DESCOPE_PROJECT_ID_STAGING }}" --require-approval never --outputs-file cdk-outputs.json
       - name: Run DB migrations
         run: bash scripts/run-migrations.sh staging
-
       - name: Invalidate CloudFront cache
         run: bash scripts/invalidate-cache.sh staging
+
+  # ============================================================================
+  # DEPLOY: Demo (manual trigger only)
+  # ============================================================================
+  deploy-demo:
+    name: Deploy Demo
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'demo'
+    environment:
+      name: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEMO }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEMO }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install dependencies
+        run: |
+          pip install aws-cdk-lib constructs boto3
+          pip install -r infrastructure/requirements.txt
+          npm install -g aws-cdk
+          bash scripts/build-layer.sh
+      - name: CDK Deploy Explicit Descope Config
+        run: |
+          cd infrastructure
+          cdk deploy --all -c env=demo -c "environments:demo:descope_project_id=${{ secrets.DESCOPE_PROJECT_ID_DEMO }}" --require-approval never --outputs-file cdk-outputs.json
+      - name: Run DB migrations
+        run: bash scripts/run-migrations.sh demo
+      - name: Invalidate CloudFront cache
+        run: bash scripts/invalidate-cache.sh demo
 
   # ============================================================================
   # DEPLOY: Production (manual trigger only)
@@ -236,44 +260,34 @@ jobs:
       name: production
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Download frontend dist
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist
           path: frontend/dist/
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Install dependencies
         run: |
           pip install aws-cdk-lib constructs boto3
           pip install -r infrastructure/requirements.txt
           npm install -g aws-cdk
           bash scripts/build-layer.sh
-
-      - name: CDK Deploy
+      - name: CDK Deploy Explicit Descope Config
         run: |
           cd infrastructure
-          cdk deploy --all -c env=prod --require-approval never --outputs-file cdk-outputs.json
-
+          cdk deploy --all -c env=prod -c "environments:prod:descope_project_id=${{ secrets.DESCOPE_PROJECT_ID_PROD }}" --require-approval never --outputs-file cdk-outputs.json
       - name: Run DB migrations
         run: bash scripts/run-migrations.sh prod
-
       - name: Invalidate CloudFront cache
         run: bash scripts/invalidate-cache.sh prod

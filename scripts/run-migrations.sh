@@ -42,6 +42,22 @@ RESPONSE=$(aws lambda invoke \
     --query 'StatusCode' \
     --output text 2>&1)
 
+echo "  Lambda status code (migration): ${RESPONSE}"
+
+# Also run seed if environment is demo
+if [[ "$ENV" == "demo" ]]; then
+    echo "→ Running data seeding via Lambda: ${FUNCTION_NAME}"
+    SEED_RESPONSE=$(aws lambda invoke \
+        --function-name "$FUNCTION_NAME" \
+        --payload '{"command": "seed"}' \
+        --cli-binary-format raw-in-base64-out \
+        /tmp/seed-response.json \
+        --query 'StatusCode' \
+        --output text 2>&1)
+    echo "  Lambda status code (seeding): ${SEED_RESPONSE}"
+    cat /tmp/seed-response.json
+fi
+
 echo "  Lambda status code: ${RESPONSE}"
 
 if [[ -f /tmp/migration-response.json ]]; then

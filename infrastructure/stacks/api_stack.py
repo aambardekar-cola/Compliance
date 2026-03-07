@@ -89,58 +89,20 @@ class ApiStack(cdk.Stack):
             )
         )
 
-        # ---- Descope JWT Authorizer Lambda ----
-        authorizer_lambda = lambda_.Function(
-            self,
-            "AuthorizerHandler",
-            code=lambda_.Code.from_asset("../backend"),
-            handler="api.middleware.authorizer.handler",
-            runtime=lambda_.Runtime.PYTHON_3_12,
-            architecture=lambda_.Architecture.ARM_64,
-            memory_size=256,
-            timeout=Duration.seconds(10),
-            layers=[deps_layer],
-            environment={
-                "LOG_LEVEL": log_level,
-                "DESCOPE_PROJECT_ID": descope_project_id,
-            },
-        )
-
         # ---- API Gateway ----
-        authorizer = apigw.TokenAuthorizer(
-            self,
-            "DescopeAuthorizer",
-            handler=authorizer_lambda,
-            results_cache_ttl=Duration.minutes(5),
-            identity_source="method.request.header.Authorization",
-        )
-
         self.api = apigw.LambdaRestApi(
             self,
             "ComplianceApi",
             handler=self.api_lambda,
             proxy=True,
-            default_method_options=apigw.MethodOptions(
-                authorizer=authorizer,
-                authorization_type=apigw.AuthorizationType.CUSTOM,
-            ),
             deploy_options=apigw.StageOptions(
                 stage_name="api",
                 throttling_rate_limit=100,
                 throttling_burst_limit=200,
                 logging_level=apigw.MethodLoggingLevel.INFO,
             ),
-            default_cors_preflight_options=apigw.CorsOptions(
-                allow_origins=apigw.Cors.ALL_ORIGINS,
-                allow_methods=apigw.Cors.ALL_METHODS,
-                allow_headers=[
-                    "Content-Type",
-                    "Authorization",
-                    "X-Amz-Date",
-                    "X-Api-Key",
-                    "X-Tenant-Id",
-                ],
-            ),
+            # Removing default_cors_preflight_options from API Gateway.
+            # CORS is handled entirely by FastAPI's CORSMiddleware.
         )
 
         # Add health check endpoint (no auth)
@@ -148,7 +110,6 @@ class ApiStack(cdk.Stack):
         health.add_method(
             "GET",
             apigw.LambdaIntegration(self.api_lambda),
-            authorization_type=apigw.AuthorizationType.NONE,
         )
 
         self.api_url = self.api.url
@@ -158,3 +119,4 @@ class ApiStack(cdk.Stack):
         cdk.CfnOutput(
             self, "ApiLambdaArn", value=self.api_lambda.function_arn
         )
+

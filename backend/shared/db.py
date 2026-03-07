@@ -16,31 +16,48 @@ _engine = None
 _session_factory = None
 
 
+import asyncio
+
 def _build_database_url() -> str:
     """Build the database URL from config or AWS Secrets Manager."""
     settings = get_settings()
 
     if settings.is_production and settings.db_secret_arn:
-        # In production, fetch credentials from Secrets Manager
+        import boto3
+        # In production, fetch credentials from Secrets Manager (non-blocking)
+        # Note: Depending on event loop state, a synchronous call here
+        # is dangerous. We will return the database URL directly but we should
+        # use asyncio.to_thread in get_engine calling this instead.
+        pass
+    return settings.database_url
+
+
+async def _get_secret_database_url(settings) -> str:
+    """Async wrapper to fetch DB credentials from Secrets Manager."""
+    def fetch_secret():
+        import boto3
         client = boto3.client("secretsmanager", region_name=settings.aws_region)
         response = client.get_secret_value(SecretId=settings.db_secret_arn)
-        secret = json.loads(response["SecretString"])
-
-        username = secret["username"]
-        password = secret["password"]
-        host = settings.db_proxy_endpoint  # Use RDS Proxy endpoint
-        database = "compliance_db"
-
-        return f"postgresql+asyncpg://{username}:{password}@{host}:5432/{database}"
-    else:
-        return settings.database_url
+        return json.loads(response["SecretString"])
+    
+    secret = await asyncio.to_thread(fetch_secret)
+    username = secret["username"]
+    password = secret["password"]
+    host = settings.db_proxy_endpoint
+    database = "compliance_db"
+    return f"postgresql+asyncpg://{username}:{password}@{host}:5432/{database}"
 
 
-def get_engine():
+async def get_engine():
     """Get or create the async SQLAlchemy engine."""
     global _engine
     if _engine is None:
-        database_url = _build_database_url()
+        settings = get_settings()
+        if settings.is_production and settings.db_secret_arn:
+            database_url = await _get_secret_database_url(settings)
+        else:
+            database_url = settings.database_url
+            
         _engine = create_async_engine(
             database_url,
             echo=get_settings().log_level == "DEBUG",
@@ -56,7 +73,7 @@ def get_session_factory():
     """Get or create the async session factory."""
     global _session_factory
     if _session_factory is None:
-        engine = get_engine()
+        engine = await get_engine()
         _session_factory = async_sessionmaker(
             engine,
             class_=AsyncSession,
@@ -73,7 +90,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         async with get_db_session() as session:
             result = await session.execute(select(Regulation))
     """
-    factory = get_session_factory()
+    factory = await get_session_factory()
     session = factory()
     try:
         yield session
@@ -93,7 +110,7 @@ async def get_session_dependency() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db():
     """Initialize the database schema (for development/testing)."""
-    engine = get_engine()
+    engine = await get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database schema initialized")

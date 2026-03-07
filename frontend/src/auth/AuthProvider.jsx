@@ -8,7 +8,14 @@ import { AuthProvider as DescopeAuthProvider, useSession, useUser, useDescope } 
 import { MockAuthProvider, useMockSession, useMockUser, useMockDescope, useMockAuth } from './MockAuthProvider';
 
 const descopeProjectId = import.meta.env.VITE_DESCOPE_PROJECT_ID || '';
-const isMockMode = !descopeProjectId || descopeProjectId === 'YOUR_PROJECT_ID';
+const forceDemoMode = import.meta.env.VITE_FORCE_DEMO_MODE === 'true';
+
+// We start in mock mode if forced, or if no project ID is provided
+const isMockModeInitially = forceDemoMode || !descopeProjectId || descopeProjectId === 'YOUR_PROJECT_ID';
+
+// We allow localStorage to override this for local testing/demo toggling
+const savedDemoMode = localStorage.getItem('pco_demo_mode');
+const isMockMode = savedDemoMode !== null ? savedDemoMode === 'true' : isMockModeInitially;
 
 // ---- Unified Provider ----
 

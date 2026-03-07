@@ -36,6 +36,31 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         token = auth_header[7:]  # Remove 'Bearer '
 
+        # --- Demo Mode / Mock Token Support ---
+        mock_users = {
+            "mock-admin-token": CurrentUser(
+                user_id="mock-admin-123", email="admin@collabrios.com", name="Sarah Mitchell",
+                tenant_id=None, tenant_name=None, roles=["internal_admin"], permissions=[]
+            ),
+            "mock-internal-token": CurrentUser(
+                user_id="mock-internal-456", email="dev@collabrios.com", name="James Reeves",
+                tenant_id=None, tenant_name=None, roles=["internal_user"], permissions=[]
+            ),
+            "mock-client-admin-token": CurrentUser(
+                user_id="mock-client-789", email="admin@sunrisepace.org", name="Maria Santos",
+                tenant_id="tenant-custom-001", tenant_name="Sunrise PACE", roles=["client_admin"], permissions=[]
+            ),
+            "mock-client-user-token": CurrentUser(
+                user_id="mock-client-abc", email="nurse@sunrisepace.org", name="David Chen",
+                tenant_id="tenant-custom-001", tenant_name="Sunrise PACE", roles=["client_user"], permissions=[]
+            ),
+        }
+
+        if token in mock_users:
+            request.state.user = mock_users[token]
+            return await call_next(request)
+        
+        # --- Real Descope Auth ---
         try:
             user = validate_token(token)
             # Attach user to request state for use in route handlers

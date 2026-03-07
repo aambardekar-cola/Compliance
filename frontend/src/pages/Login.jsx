@@ -14,6 +14,7 @@ const PERSONAS = [
         description: 'Full platform access, all tenants',
         icon: <Shield size={18} />,
         gradient: 'var(--gradient-primary)',
+        token: 'mock-admin-token',
     },
     {
         key: 'internal',
@@ -23,6 +24,7 @@ const PERSONAS = [
         description: 'Engineering team, read/write access',
         icon: <User size={18} />,
         gradient: 'var(--gradient-info)',
+        token: 'mock-internal-token',
     },
     {
         key: 'client_admin',
@@ -32,6 +34,7 @@ const PERSONAS = [
         description: 'Sunrise PACE org admin',
         icon: <Building2 size={18} />,
         gradient: 'var(--gradient-success)',
+        token: 'mock-client-admin-token',
     },
     {
         key: 'client_user',
@@ -41,6 +44,7 @@ const PERSONAS = [
         description: 'Sunrise PACE, read-only',
         icon: <User size={18} />,
         gradient: 'var(--gradient-warning)',
+        token: 'mock-client-user-token',
     },
 ];
 
@@ -51,9 +55,11 @@ export default function Login() {
     const [customForm, setCustomForm] = useState({ name: '', email: '', role: 'internal_user' });
     const [hoveredPersona, setHoveredPersona] = useState(null);
 
-    const handleMockLogin = (userKey) => {
+    const handleMockLogin = (persona) => {
         if (mockAuth) {
-            mockAuth.login(userKey);
+            // Set the dummy token so api client passes it in Authorization header
+            localStorage.setItem('pco_auth_token', persona.token);
+            mockAuth.login(persona.key);
             setTimeout(() => navigate('/'), 700);
         }
     };
@@ -81,6 +87,27 @@ export default function Login() {
                     </div>
                     <h1 className="login-title">PaceCareOnline</h1>
                     <p className="login-subtitle">Compliance Intelligence Platform</p>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-4)' }}>
+                    <button 
+                        onClick={() => {
+                            localStorage.setItem('pco_demo_mode', isMockMode ? 'false' : 'true');
+                            window.location.reload();
+                        }}
+                        style={{
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            background: isMockMode ? 'rgba(245, 158, 11, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                            color: isMockMode ? 'var(--color-warning)' : 'var(--color-accent-light)',
+                            border: `1px solid ${isMockMode ? 'rgba(245, 158, 11, 0.3)' : 'rgba(99, 102, 241, 0.3)'}`,
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {isMockMode ? 'Disable Demo Mode' : 'Enable Demo Mode (Bypass Auth)'}
+                    </button>
                 </div>
 
                 {isMockMode ? (
@@ -154,7 +181,7 @@ export default function Login() {
                                     {PERSONAS.map((persona) => (
                                         <button
                                             key={persona.key}
-                                            onClick={() => handleMockLogin(persona.key)}
+                                            onClick={() => handleMockLogin(persona)}
                                             onMouseEnter={() => setHoveredPersona(persona.key)}
                                             onMouseLeave={() => setHoveredPersona(null)}
                                             style={{

@@ -22,25 +22,30 @@
         "log_level": "DEBUG",
         "aurora_min_capacity": 0.5,
         "aurora_max_capacity": 2,
-        "nat_gateways": 1,
-        "descope_project_id": "P31bVjWpMwOtVB9iv4nNa8prlR5e"
+        "nat_gateways": 1
       },
       "staging": {
         "app_name": "pco-compliance-staging",
         "log_level": "INFO",
         "aurora_min_capacity": 0.5,
         "aurora_max_capacity": 4,
-        "nat_gateways": 1,
-        "descope_project_id": "P31bVjWpMwOtVB9iv4nNa8prlR5e"
+        "nat_gateways": 1
+      },
+      "demo": {
+        "app_name": "pco-compliance-demo",
+        "log_level": "INFO",
+        "aurora_min_capacity": 0.5,
+        "aurora_max_capacity": 2,
+        "nat_gateways": 1
       },
       "prod": {
         "app_name": "pco-compliance-prod",
         "log_level": "WARN",
         "aurora_min_capacity": 1,
         "aurora_max_capacity": 8,
-        "nat_gateways": 2,
-        "descope_project_id": ""
+        "nat_gateways": 2
       }
     }
   }
 }
+

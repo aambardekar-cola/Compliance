@@ -82,6 +82,15 @@ def handler(event, context):
         elif command == "history":
             alembic_cmd.history(alembic_cfg)
             message = "History displayed in logs"
+        elif command == "seed":
+            # Seed demo data
+            import asyncio
+            from scripts.seed_demo_data import seed_demo_data
+            
+            # Since the global event loop might not be set up correctly in lambda,
+            # we use asyncio.run to execute the async seeding function.
+            asyncio.run(seed_demo_data())
+            message = "Demo data successfully seeded"
         else:
             return {
                 "statusCode": 400,
@@ -95,7 +104,7 @@ def handler(event, context):
         }
 
     except Exception as e:
-        logger.error(f"Migration failed: {e}", exc_info=True)
+        logger.error(f"Migration/Seeding failed: {e}", exc_info=True)
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)}),
