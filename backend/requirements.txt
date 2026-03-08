@@ -25,6 +25,8 @@ pydantic-settings>=2.7.0
 
 # HTTP client
 httpx>=0.28.0           # Async HTTP client for API calls
+beautifulsoup4>=4.12.0  # HTML parsing for scraper
+lxml>=5.0.0             # XML parser for eCFR API
 
 # Utilities
 python-dateutil>=2.9.0

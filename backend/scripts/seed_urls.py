@@ -1,0 +1,50 @@
+import asyncio
+import os
+import sys
+
+# Add the backend dir to the Python path so we can import models and config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from shared.config import settings
+from shared.models import ComplianceRuleUrl
+
+# Re-use the engine setup from api/main.py
+engine = create_async_engine(settings.DATABASE_URL, echo=True)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+SEED_URLS = [
+    {
+        "name": "eCFR Title 42, Part 460 (PACE Regulations)",
+        "url": "https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-E/part-460",
+        "description": "The definitive, living codified version of all Federal PACE regulations.",
+    },
+    {
+        "name": "Federal Register: CY 2026 MA and PACE Final Rule",
+        "url": "https://www.federalregister.gov/documents/2025/04/15/2025-00000/medicare-and-medicaid-programs-contract-year-2026-policy-and-technical-changes",
+        "description": "Contains the latest finalized changes taking effect for the upcoming contract year.",
+    },
+    {
+        "name": "CMS/Medicaid Official PACE Program Overview",
+        "url": "https://www.medicaid.gov/medicaid/long-term-services-supports/program-all-inclusive-care-elderly/index.html",
+        "description": "Contains critical sub-regulatory guidance, application updates, and CMS memos.",
+    }
+]
+
+async def seed_data():
+    async with AsyncSessionLocal() as session:
+        print("Starting seed of ComplianceRuleUrl...")
+        for item in SEED_URLS:
+            rule = ComplianceRuleUrl(
+                name=item["name"],
+                url=item["url"],
+                description=item["description"],
+                is_active=True
+            )
+            session.add(rule)
+        
+        await session.commit()
+        print("Seed completed successfully.")
+
+if __name__ == "__main__":
+    asyncio.run(seed_data())

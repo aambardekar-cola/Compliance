@@ -111,8 +111,66 @@ class ComplianceRuleUrl(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    # Relationships
+    scrapes = relationship("ScrapedContent", back_populates="rule_url", cascade="all, delete-orphan")
+
     __table_args__ = (
         Index("ix_comp_urls_active", "is_active"),
+    )
+
+
+class ScrapedContent(Base):
+    """Raw text/HTML content scraped from a configured ComplianceRuleUrl."""
+    __tablename__ = "scraped_content"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    url_id = Column(UUID(as_uuid=True), ForeignKey("compliance_rule_urls.id"), nullable=False)
+    content_text = Column(Text, nullable=False)  # The extracted main body
+    content_hash = Column(String(64), nullable=True)  # SHA-256 for diffing
+    is_processed = Column(Boolean, default=False)  # Whether AI pipeline has read this yet
+    
+    scraped_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    # Relationships
+    rule_url = relationship("ComplianceRuleUrl", back_populates="scrapes")
+
+    __table_args__ = (
+        Index("ix_scraped_content_url_id", "url_id"),
+        Index("ix_scraped_content_processed", "is_processed"),
+    )
+
+    # Relationships
+    gaps = relationship("ComplianceGap", back_populates="scraped_content", cascade="all, delete-orphan")
+
+
+class ComplianceGap(Base):
+    """An actionable compliance gap or requirement identified by the AI Engine."""
+    __tablename__ = "compliance_gaps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scraped_content_id = Column(UUID(as_uuid=True), ForeignKey("scraped_content.id"), nullable=False)
+    
+    # AI Extracted Fields
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(Enum(GapStatus), default=GapStatus.IDENTIFIED, nullable=False)
+    severity = Column(Enum(GapSeverity), nullable=False)
+    affected_modules = Column(JSON, default=list)  # e.g., ["Care Planning", "IDT"]
+    deadline = Column(Date, nullable=True)
+    
+    is_new_requirement = Column(Boolean, default=False)
+    
+    # Audit trail
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    scraped_content = relationship("ScrapedContent", back_populates="gaps")
+
+    __table_args__ = (
+        Index("ix_comp_gaps_scraped", "scraped_content_id"),
+        Index("ix_comp_gaps_status", "status"),
+        Index("ix_comp_gaps_severity", "severity"),
     )
 
 

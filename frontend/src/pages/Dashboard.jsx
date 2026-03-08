@@ -15,27 +15,31 @@ export default function Dashboard() {
     const { sessionToken } = useAuthSession();
     apiClient.setToken(sessionToken);
 
-    const { data, isLoading, error } = useQuery({
+    const { data: dashboardData, isLoading: isDashboardLoading } = useQuery({
         queryKey: ['dashboard'],
         queryFn: () => apiClient.getDashboard(),
         enabled: !!sessionToken,
     });
 
-    if (isLoading) {
+    const { data: gapsData, isLoading: isGapsLoading } = useQuery({
+        queryKey: ['gaps', { page_size: 5 }],
+        queryFn: () => apiClient.getGaps({ page_size: 5 }),
+        enabled: !!sessionToken,
+    });
+
+    if (isDashboardLoading || isGapsLoading) {
         return <div className="loading-card"><div className="loading-spinner" /></div>;
     }
 
     // Use mock data if API isn't connected yet
-    const dashboard = data || {
+    const dashboard = dashboardData || {
         regulations: { total: 12, proposed: 3, comment_period: 2, final_rule: 5, effective: 2, avg_relevance: 0.78 },
         gaps: { total: 24, critical: 3, high: 7, open: 14, resolved: 10, total_effort_hours: 320 },
         communications: { total: 8, drafts: 2, pending_approval: 1, sent: 5 },
-        upcoming_deadlines: [
-            { id: '1', title: 'CY2026 PACE Final Rule — Service Delivery Timeframes', effective_date: '2026-01-01', status: 'final_rule' },
-            { id: '2', title: 'PACE Participant Rights Updates', effective_date: '2026-04-01', status: 'proposed' },
-            { id: '3', title: 'Interoperability & Prior Auth API Requirements', effective_date: '2026-07-01', status: 'comment_period' },
-        ],
     };
+    
+    // AI generated gaps from DB
+    const recentGaps = gapsData?.items || [];
 
     return (
         <div className="animate-in">
@@ -94,35 +98,53 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Upcoming Deadlines */}
+            {/* AI Identified Gaps */}
             <div className="card">
                 <div className="card-header">
                     <div>
-                        <h2 className="card-title">Upcoming Deadlines</h2>
-                        <p className="card-subtitle">Regulations with approaching effective dates</p>
+                        <h2 className="card-title">AI Identified Gaps</h2>
+                        <p className="card-subtitle">Recent actionable requirements extracted by Claude 3 Bedrock</p>
                     </div>
-                    <Clock size={20} color="var(--color-text-muted)" />
+                    <AlertTriangle size={20} color="var(--color-critical)" />
                 </div>
 
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th>Regulation</th>
-                            <th>Effective Date</th>
+                            <th>Requirement Title</th>
+                            <th>Target Modules</th>
+                            <th>Severity</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {dashboard.upcoming_deadlines.map((d) => (
-                            <tr key={d.id}>
-                                <td style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>
-                                    {d.title}
+                        {recentGaps.length === 0 ? (
+                            <tr>
+                                <td colSpan="4" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+                                    No compliance gaps identified yet. (Waiting for scraper AI analysis)
                                 </td>
-                                <td>{d.effective_date}</td>
+                            </tr>
+                        ) : recentGaps.map((g) => (
+                            <tr key={g.id}>
+                                <td style={{ color: 'var(--color-text-primary)', fontWeight: 500, maxWidth: '400px', whiteSpace: 'normal' }}>
+                                    {g.title}
+                                    {g.is_new_requirement && (
+                                        <span className="badge badge-accent" style={{ marginLeft: '8px', fontSize: '10px' }}>NEW</span>
+                                    )}
+                                </td>
+                                <td>{g.affected_modules && g.affected_modules.length > 0 ? g.affected_modules.join(', ') : 'Unassigned'}</td>
                                 <td>
-                                    <span className={`badge badge-${getStatusColor(d.status)}`}>
+                                    <span style={{ 
+                                        color: g.severity === 'critical' ? 'var(--color-critical)' : g.severity === 'high' ? 'var(--color-danger)' : 'var(--color-warning)',
+                                        fontWeight: 600
+                                    }}>
+                                        {formatStatus(g.severity)}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span className="badge badge-info">
                                         <span className="badge-dot" />
-                                        {formatStatus(d.status)}
+                                        {formatStatus(g.status)}
                                     </span>
                                 </td>
                             </tr>

@@ -164,6 +164,44 @@ class PipelineStack(cdk.Stack):
             )
         )
 
+        # ---- Scraper Lambda ----
+        self.scraper_lambda = lambda_.Function(
+            self,
+            "ScraperHandler",
+            code=lambda_.Code.from_asset("../backend"),
+            handler="lambdas.scraper.main.handler",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            architecture=lambda_.Architecture.ARM_64,
+            memory_size=1024,
+            timeout=Duration.minutes(10),
+            vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
+            ),
+            security_groups=[lambda_sg],
+            layers=[deps_layer],
+            environment=common_env,
+        )
+
+        db_secret.grant_read(self.scraper_lambda)
+        documents_bucket.grant_read_write(self.scraper_lambda)
+        self.analysis_queue.grant_send_messages(self.scraper_lambda)
+
+        # ---- EventBridge: Daily Scraper Schedule ----
+        events.Rule(
+            self,
+            "DailyScraperRule",
+            schedule=events.Schedule.cron(
+                minute="0",
+                hour="2",
+                month="*",
+                week_day="*",
+                year="*",
+            ),
+            targets=[events_targets.LambdaFunction(self.scraper_lambda)],
+            description="Trigger URL scraping daily at 2 AM UTC",
+        )
+
         # ---- EventBridge: Daily Ingestion Schedule ----
         events.Rule(
             self,

@@ -1,13 +1,14 @@
-"""Gap Analysis API routes — view compliance gaps and effort estimates."""
+"""Gap Analysis API routes — view compliance gaps extracted by the AI Engine."""
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from shared.db import get_session_dependency
-from shared.models import GapAnalysis, GapSeverity, GapStatus
+from shared.models import ComplianceGap, GapSeverity, GapStatus
 
 router = APIRouter()
 
@@ -15,45 +16,41 @@ router = APIRouter()
 async def list_gaps(
     request: Request,
     db: AsyncSession = Depends(get_session_dependency),
-    regulation_id: Optional[UUID] = Query(None, description="Filter by regulation"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    team: Optional[str] = Query(None, description="Filter by assigned team"),
+    module: Optional[str] = Query(None, description="Filter by affected PCO module"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
     """List compliance gaps with filtering and pagination."""
-    query = select(GapAnalysis)
-
-    if regulation_id:
-        query = query.where(GapAnalysis.regulation_id == regulation_id)
+    query = select(ComplianceGap).options(joinedload(ComplianceGap.scraped_content))
 
     if severity:
         try:
-            query = query.where(GapAnalysis.severity == GapSeverity(severity))
+            query = query.where(ComplianceGap.severity == GapSeverity(severity.lower()))
         except ValueError:
             raise HTTPException(400, f"Invalid severity: {severity}")
 
     if status:
         try:
-            query = query.where(GapAnalysis.status == GapStatus(status))
+            query = query.where(ComplianceGap.status == GapStatus(status.lower()))
         except ValueError:
             raise HTTPException(400, f"Invalid status: {status}")
 
-    if team:
-        query = query.where(GapAnalysis.assigned_team == team)
-
+    # Note: affected_modules is a JSON array. In Postgres we'd use array ops, but this works for basic filtering
+    # if it becomes a problem, we can use raw SQL cast to JSONB
+    
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar()
 
-    # Apply pagination
+    # Apply pagination and sorting
     query = (
         query
         .order_by(
-            desc(GapAnalysis.severity == GapSeverity.CRITICAL),
-            desc(GapAnalysis.severity == GapSeverity.HIGH),
-            desc(GapAnalysis.created_at),
+            desc(ComplianceGap.severity == GapSeverity.CRITICAL),
+            desc(ComplianceGap.severity == GapSeverity.HIGH),
+            desc(ComplianceGap.created_at),
         )
         .offset((page - 1) * page_size)
         .limit(page_size)
@@ -76,27 +73,30 @@ async def get_gaps_summary(
     request: Request,
     db: AsyncSession = Depends(get_session_dependency),
 ):
-    """Get gap analysis summary by team and severity."""
+    """Get gap analysis summary by severity."""
+    # Simplified summary for the dashboard
     query = select(
-        GapAnalysis.assigned_team,
-        GapAnalysis.severity,
-        func.count(GapAnalysis.id).label("count"),
-        func.sum(GapAnalysis.effort_hours).label("total_hours"),
-    ).group_by(GapAnalysis.assigned_team, GapAnalysis.severity)
+        ComplianceGap.severity,
+        func.count(ComplianceGap.id).label("count"),
+    ).group_by(ComplianceGap.severity)
 
     result = await db.execute(query)
     rows = result.all()
 
-    summary = {}
+    summary = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "total": 0
+    }
+    
     for row in rows:
-        team = row.assigned_team or "unassigned"
-        if team not in summary:
-            summary[team] = {"total_gaps": 0, "total_hours": 0, "by_severity": {}}
-        summary[team]["total_gaps"] += row.count
-        summary[team]["total_hours"] += row.total_hours or 0
-        summary[team]["by_severity"][row.severity.value] = row.count
+        sev_value = row.severity.value if row.severity else "low"
+        summary[sev_value] = row.count
+        summary["total"] += row.count
 
-    return {"teams": summary}
+    return summary
 
 
 @router.get("/gaps/{gap_id}")
@@ -107,7 +107,7 @@ async def get_gap(
 ):
     """Get detailed gap analysis information."""
     result = await db.execute(
-        select(GapAnalysis).where(GapAnalysis.id == gap_id)
+        select(ComplianceGap).where(ComplianceGap.id == gap_id)
     )
     gap = result.scalar_one_or_none()
 
@@ -117,27 +117,19 @@ async def get_gap(
     return _serialize_gap(gap, detailed=True)
 
 
-def _serialize_gap(gap: GapAnalysis, detailed: bool = False) -> dict:
-    """Serialize a GapAnalysis model to API response."""
+def _serialize_gap(gap: ComplianceGap, detailed: bool = False) -> dict:
+    """Serialize a ComplianceGap model to API response."""
     data = {
         "id": str(gap.id),
-        "regulation_id": str(gap.regulation_id),
+        "source_content_id": str(gap.scraped_content_id),
         "title": gap.title,
         "description": gap.description,
         "severity": gap.severity.value if gap.severity else None,
         "status": gap.status.value if gap.status else None,
-        "assigned_team": gap.assigned_team,
-        "effort_hours": gap.effort_hours,
-        "effort_story_points": gap.effort_story_points,
-        "jira_epic_key": gap.jira_epic_key,
-        "jira_epic_url": gap.jira_epic_url,
+        "affected_modules": gap.affected_modules or [],
+        "is_new_requirement": gap.is_new_requirement,
+        "deadline": gap.deadline.isoformat() if gap.deadline else None,
         "created_at": gap.created_at.isoformat() if gap.created_at else None,
     }
-
-    if detailed:
-        data.update({
-            "affected_code": gap.affected_code or [],
-            "affected_components": gap.affected_components or [],
-        })
 
     return data
