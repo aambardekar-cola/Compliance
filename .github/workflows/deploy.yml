@@ -178,6 +178,13 @@ jobs:
         run: |
           cd infrastructure
           cdk deploy --all -c env=dev -c "environments:dev:descope_project_id=${{ secrets.DESCOPE_PROJECT_ID_DEV }}" --require-approval never --outputs-file cdk-outputs.json
+      - name: Inject Runtime Env Config
+        run: |
+          cd infrastructure
+          API_URL=$(jq -r '.["pco-compliance-dev-api"].ApiUrl' cdk-outputs.json)
+          SITE_BUCKET=$(jq -r '.["pco-compliance-dev-frontend"].SiteBucketName' cdk-outputs.json)
+          echo "window.ENV = { API_URL: '${API_URL}' };" > env-config.js
+          aws s3 cp env-config.js s3://${SITE_BUCKET}/env-config.js
       - name: Run DB migrations
         run: bash scripts/run-migrations.sh dev
       - name: Invalidate CloudFront cache

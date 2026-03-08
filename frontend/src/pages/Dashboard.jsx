@@ -22,8 +22,8 @@ export default function Dashboard() {
     });
 
     const { data: gapsData, isLoading: isGapsLoading } = useQuery({
-        queryKey: ['gaps', { page_size: 5 }],
-        queryFn: () => apiClient.getGaps({ page_size: 5 }),
+        queryKey: ['gaps', { page_size: 5, status: 'open' }],
+        queryFn: () => apiClient.getGaps({ page_size: 5, status: 'open' }),
         enabled: !!sessionToken,
     });
 

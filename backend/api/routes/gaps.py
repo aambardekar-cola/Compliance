@@ -32,10 +32,13 @@ async def list_gaps(
             raise HTTPException(400, f"Invalid severity: {severity}")
 
     if status:
-        try:
-            query = query.where(ComplianceGap.status == GapStatus(status.lower()))
-        except ValueError:
-            raise HTTPException(400, f"Invalid status: {status}")
+        if status.lower() == 'open':
+            query = query.where(ComplianceGap.status.in_([GapStatus.IDENTIFIED, GapStatus.IN_PROGRESS]))
+        else:
+            try:
+                query = query.where(ComplianceGap.status == GapStatus(status.lower()))
+            except ValueError:
+                raise HTTPException(400, f"Invalid status: {status}")
 
     # Note: affected_modules is a JSON array. In Postgres we'd use array ops, but this works for basic filtering
     # if it becomes a problem, we can use raw SQL cast to JSONB
