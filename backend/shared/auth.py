@@ -1,6 +1,7 @@
 """Descope authentication utilities."""
 import logging
 from dataclasses import dataclass
+from typing import Optional
 
 import jwt
 from descope import DescopeClient, AuthException
@@ -18,8 +19,8 @@ class CurrentUser:
     user_id: str
     email: str
     name: str
-    tenant_id: str | None
-    tenant_name: str | None
+    tenant_id: Optional[str]
+    tenant_name: Optional[str]
     roles: list[str]
     permissions: list[str]
 

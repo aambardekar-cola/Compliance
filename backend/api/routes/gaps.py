@@ -11,7 +11,6 @@ from shared.models import GapAnalysis, GapSeverity, GapStatus
 
 router = APIRouter()
 
-
 @router.get("/gaps")
 async def list_gaps(
     request: Request,

@@ -14,10 +14,11 @@ from sqlalchemy import (
     Date,
     ForeignKey,
     Enum,
+    JSON,
     Index,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 
@@ -87,7 +88,7 @@ class Tenant(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     descope_tenant_id = Column(String(255), unique=True, nullable=False, index=True)
-    settings = Column(JSONB, default=dict)
+    settings = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -128,10 +129,10 @@ class Regulation(Base):
     source_url = Column(String(2000), nullable=True)
 
     # AI Analysis
-    ai_analysis = Column(JSONB, default=dict)  # Structured AI analysis output
+    ai_analysis = Column(JSON, default=dict)  # Structured AI analysis output
     relevance_score = Column(Float, nullable=True)  # 0.0 - 1.0
-    affected_areas = Column(JSONB, default=list)  # List of affected EHR areas
-    key_requirements = Column(JSONB, default=list)  # Extracted requirements
+    affected_areas = Column(JSON, default=list)  # List of affected EHR areas
+    key_requirements = Column(JSON, default=list)  # Extracted requirements
 
     # Status & Timeline
     status = Column(Enum(RegulationStatus), default=RegulationStatus.PROPOSED, nullable=False)
@@ -140,8 +141,8 @@ class Regulation(Base):
     published_date = Column(Date, nullable=True)
 
     # Metadata
-    cfr_references = Column(JSONB, default=list)  # e.g., ["42 CFR 460"]
-    agencies = Column(JSONB, default=list)  # e.g., ["CMS", "HHS"]
+    cfr_references = Column(JSON, default=list)  # e.g., ["42 CFR 460"]
+    agencies = Column(JSON, default=list)  # e.g., ["CMS", "HHS"]
     document_type = Column(String(100), nullable=True)  # "proposed_rule", "final_rule", "guidance"
 
     ingested_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -173,8 +174,8 @@ class GapAnalysis(Base):
     status = Column(Enum(GapStatus), default=GapStatus.IDENTIFIED, nullable=False)
 
     # Code references
-    affected_code = Column(JSONB, default=list)  # [{repo, file_path, line_range, description}]
-    affected_components = Column(JSONB, default=list)  # ["enrollment", "billing", "care_plan"]
+    affected_code = Column(JSON, default=list)  # [{repo, file_path, line_range, description}]
+    affected_components = Column(JSON, default=list)  # ["enrollment", "billing", "care_plan"]
 
     # Work estimation
     assigned_team = Column(String(100), nullable=True)
@@ -252,12 +253,12 @@ class ExecReport(Base):
     summary_plain = Column(Text, nullable=True)
 
     # Metrics
-    metrics = Column(JSONB, default=dict)  # {new_regulations, gaps_identified, gaps_resolved, ...}
-    risks = Column(JSONB, default=list)  # [{title, severity, description, mitigation}]
-    highlights = Column(JSONB, default=list)  # Key accomplishments
+    metrics = Column(JSON, default=dict)  # {new_regulations, gaps_identified, gaps_resolved, ...}
+    risks = Column(JSON, default=list)  # [{title, severity, description, mitigation}]
+    highlights = Column(JSON, default=list)  # Key accomplishments
 
     # Delivery
-    sent_to = Column(JSONB, default=list)  # List of email addresses
+    sent_to = Column(JSON, default=list)  # List of email addresses
     sent_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -295,7 +296,7 @@ class IntegrationConfig(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     integration_type = Column(String(50), nullable=False)  # "gitlab", "jira"
-    config = Column(JSONB, nullable=False)  # Encrypted config data
+    config = Column(JSON, nullable=False)  # Encrypted config data
     is_active = Column(Boolean, default=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -316,7 +317,7 @@ class AuditLog(Base):
     action = Column(String(100), nullable=False)
     resource_type = Column(String(100), nullable=False)
     resource_id = Column(String(255), nullable=True)
-    details = Column(JSONB, default=dict)
+    details = Column(JSON, default=dict)
     ip_address = Column(String(50), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

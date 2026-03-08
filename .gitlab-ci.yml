@@ -1,0 +1,120 @@
+image: node:18-alpine
+
+stages:
+  - install
+  - lint-test
+  - build
+  - deploy-dev
+  - deploy-staging
+  - deploy-prod
+
+variables:
+  # AWS and CDK configuration variables
+  AWS_DEFAULT_REGION: us-east-1
+  CDK_VERSION: "2.133.0"
+
+# --- Common Setup ---
+.python_cache: &python_cache
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-python
+    paths:
+      - infrastructure/.venv/
+      - backend/.venv/
+
+.node_cache: &node_cache
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-node
+    paths:
+      - frontend/node_modules/
+
+# --- Stages ---
+install_dependencies:
+  stage: install
+  <<: *node_cache
+  <<: *python_cache
+  script:
+    # Python setup
+    - apk add --no-cache python3 py3-pip python3-dev
+    - cd infrastructure
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install -r requirements.txt
+    - cd ../backend
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install -r requirements.txt
+    # Node/Frontend setup
+    - cd ../frontend
+    - npm ci
+
+lint_and_test:
+  stage: lint-test
+  <<: *node_cache
+  <<: *python_cache
+  script:
+    - apk add --no-cache python3 py3-pip
+    # Test Backend
+    - cd backend
+    - source .venv/bin/activate
+    - pip install pytest flake8
+    - flake8 .
+    - pytest
+    # Test Frontend
+    - cd ../frontend
+    - npm run lint
+  allow_failure: true
+
+build_frontend:
+  stage: build
+  <<: *node_cache
+  script:
+    - cd frontend
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist/
+    expire_in: 1 day
+
+# --- Deployment ---
+.deploy_template: &deploy_template
+  image: 
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  before_script:
+    - yum install -y nodejs
+    - npm install -g aws-cdk@${CDK_VERSION}
+    - cd infrastructure
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install -r requirements.txt
+
+deploy_dev:
+  stage: deploy-dev
+  <<: *deploy_template
+  environment:
+    name: dev
+  script:
+    - cdk deploy --all --require-approval never -c env=dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+deploy_staging:
+  stage: deploy-staging
+  <<: *deploy_template
+  environment:
+    name: staging
+  script:
+    - cdk deploy --all --require-approval never -c env=staging
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+
+deploy_prod:
+  stage: deploy-prod
+  <<: *deploy_template
+  environment:
+    name: prod
+  script:
+    - cdk deploy --all --require-approval never -c env=prod
+  rules:
+    - if: $CI_COMMIT_TAG

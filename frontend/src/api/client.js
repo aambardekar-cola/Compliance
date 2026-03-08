@@ -2,7 +2,8 @@
  * API client for the PCO Compliance backend.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// Use VITE_API_URL if defined; otherwise default to a relative path in production or localhost in dev.
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://api.pacecareonline.com/v1' : 'http://localhost:8000/api');
 
 class ApiClient {
     constructor() {

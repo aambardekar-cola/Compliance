@@ -69,7 +69,7 @@ async def get_engine():
     return _engine
 
 
-def get_session_factory():
+async def get_session_factory():
     """Get or create the async session factory."""
     global _session_factory
     if _session_factory is None:

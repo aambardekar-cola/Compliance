@@ -1,7 +1,7 @@
 """FastAPI authentication middleware using Descope."""
 import logging
 
-from fastapi import Request
+from fastapi import Request, Depends
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -87,3 +87,18 @@ def get_current_user(request: Request) -> CurrentUser:
     if user is None:
         raise Exception("User not found in request state")
     return user
+
+
+def require_role(roles: list[str]):
+    """FastAPI dependency factory to assert the current user has at least one of the specified roles."""
+    def role_dependency(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        # Normalize to list if a single enum/string was passed
+        roles_list = roles if isinstance(roles, list) else [roles]
+        # Convert provided roles to their string values if they are Enums
+        allowed_roles = [r.value if hasattr(r, "value") else str(r) for r in roles_list]
+        print(f"DEBUG: user.roles={user.roles}, allowed_roles={allowed_roles}")
+        if not any(role in user.roles for role in allowed_roles):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        return user
+    return role_dependency

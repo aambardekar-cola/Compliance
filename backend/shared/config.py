@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Database
     db_secret_arn: str = ""
     db_proxy_endpoint: str = ""
-    database_url: str = "postgresql+asyncpg://compliance_user:password@localhost:5432/compliance_db"
+    database_url: str = "sqlite+aiosqlite:///local_test.db"
 
     # AWS
     aws_region: str = "us-east-2"

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { useAuthSession } from '../auth/AuthProvider';
+import { useAuthUser } from '../auth/AuthProvider';
 import {
     LayoutDashboard,
     FileText,
@@ -41,8 +41,8 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-    const { user } = useAuthSession();
-    const isInternalAdmin = user?.role === 'INTERNAL_ADMIN';
+    const { user } = useAuthUser();
+    const isInternalAdmin = user?.roles?.includes('internal_admin') || user?.role === 'INTERNAL_ADMIN';
 
     return (
         <aside className="sidebar">

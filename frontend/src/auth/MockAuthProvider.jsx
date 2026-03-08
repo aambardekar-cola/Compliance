@@ -47,28 +47,12 @@ const MOCK_USERS = {
     },
 };
 
-// Generate a mock JWT-like token
+// Generate a mock JWT-like token that the FastAPI backend AuthMiddleware recognizes
 function generateMockToken(user) {
-    const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-    const payload = btoa(JSON.stringify({
-        sub: user.userId,
-        email: user.email,
-        name: user.name,
-        roles: user.roles,
-        permissions: user.permissions,
-        tenants: user.tenantId ? {
-            [user.tenantId]: {
-                name: user.tenantName,
-                roles: user.roles,
-                permissions: user.permissions,
-            }
-        } : {},
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 86400,
-        iss: 'mock-descope-provider',
-    }));
-    const signature = btoa('mock-signature');
-    return `${header}.${payload}.${signature}`;
+    if (user.roles?.includes('internal_admin')) return 'mock-admin-token';
+    if (user.roles?.includes('internal_user')) return 'mock-internal-token';
+    if (user.roles?.includes('client_admin')) return 'mock-client-admin-token';
+    return 'mock-client-user-token';
 }
 
 // ---- Context ----
@@ -153,6 +137,7 @@ export function useMockUser() {
             email: ctx.user.email,
             name: ctx.user.name,
             loginIds: [ctx.user.email],
+            roles: ctx.user.roles,
         } : null,
         isUserLoading: ctx?.isLoading ?? false,
     };

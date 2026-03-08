@@ -1,4 +1,5 @@
 """Subscriptions API routes — manage client notification preferences."""
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -24,7 +25,7 @@ AVAILABLE_FEATURES = [
 class UpdateSubscriptionRequest(BaseModel):
     """Request body for updating a subscription."""
     is_active: bool
-    notification_email: str | None = None
+    notification_email: Optional[str] = None
 
 
 @router.get("/subscriptions")
