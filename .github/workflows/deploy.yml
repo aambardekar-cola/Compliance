@@ -187,6 +187,19 @@ jobs:
           aws s3 cp env-config.js s3://${SITE_BUCKET}/env-config.js
       - name: Run DB migrations
         run: bash scripts/run-migrations.sh dev
+      - name: Auto-Seed Dev Database
+        run: |
+          cd infrastructure
+          MIGRATION_ARN=$(jq -r '.["pco-compliance-dev-data"].MigrationLambdaArn' cdk-outputs.json)
+          FUNCTION_NAME=$(echo "$MIGRATION_ARN" | awk -F: '{print $NF}')
+          aws lambda invoke --function-name "$FUNCTION_NAME" --payload '{"command": "seed"}' --cli-binary-format raw-in-base64-out /dev/null
+      - name: Trigger Scraper Analysis
+        run: |
+          # Automatically trigger the scraper immediately so data is available on the Dashboard
+          SCRAPER_ARN=$(aws lambda list-functions --query 'Functions[?contains(FunctionName, `ScraperHandler`) && contains(FunctionName, `pco-compliance-dev`)].FunctionName' --output text)
+          if [ -n "$SCRAPER_ARN" ] && [ "$SCRAPER_ARN" != "None" ]; then
+            aws lambda invoke --function-name "$SCRAPER_ARN" --invocation-type Event /dev/null
+          fi
       - name: Invalidate CloudFront cache
         run: bash scripts/invalidate-cache.sh dev
 

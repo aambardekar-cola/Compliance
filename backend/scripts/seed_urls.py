@@ -20,9 +20,9 @@ SEED_URLS = [
         "description": "The definitive, living codified version of all Federal PACE regulations.",
     },
     {
-        "name": "Federal Register: CY 2026 MA and PACE Final Rule",
-        "url": "https://www.federalregister.gov/documents/2025/04/15/2025-00000/medicare-and-medicaid-programs-contract-year-2026-policy-and-technical-changes",
-        "description": "Contains the latest finalized changes taking effect for the upcoming contract year.",
+        "name": "Federal Register: CY 2024 MA and PACE Final Rule",
+        "url": "https://www.federalregister.gov/documents/2024/04/23/2024-07105/medicare-and-medicaid-programs-medicare-advantage-medicare-prescription-drug-benefit-program",
+        "description": "Contains the latest finalized changes for MA and PACE, including immunization and grievance updates.",
     },
     {
         "name": "CMS/Medicaid Official PACE Program Overview",

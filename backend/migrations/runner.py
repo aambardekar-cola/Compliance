@@ -83,14 +83,16 @@ def handler(event, context):
             alembic_cmd.history(alembic_cfg)
             message = "History displayed in logs"
         elif command == "seed":
-            # Seed demo data
+            # Seed demo data and real compliance URLs
             import asyncio
             from scripts.seed_demo_data import seed_demo_data
+            from scripts.seed_urls import seed_data
             
             # Since the global event loop might not be set up correctly in lambda,
             # we use asyncio.run to execute the async seeding function.
             asyncio.run(seed_demo_data())
-            message = "Demo data successfully seeded"
+            asyncio.run(seed_data())
+            message = "Demo data and URLs successfully seeded"
         else:
             return {
                 "statusCode": 400,
