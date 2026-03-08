@@ -19,11 +19,14 @@ const ENVIRONMENTS = [
         color: 'var(--color-info)',
         bg: 'rgba(56, 189, 248, 0.1)',
         resources: [
-            { label: 'Frontend App', type: 'S3/CloudFront', icon: Globe, url: '#' },
-            { label: 'FastAPI Backend', type: 'API Gateway + Lambda', icon: Server, url: '#' },
-            { label: 'PostgreSQL DB', type: 'Aurora Serverless v2', icon: Database, url: '#' },
-            { label: 'Auth Tenant', type: 'Descope', icon: Shield, url: '#' },
-            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: '#' },
+            { label: 'Frontend App (CloudFront)', type: 'CDN', icon: Globe, url: 'https://us-east-2.console.aws.amazon.com/cloudfront/v4/home?region=us-east-2#/distributions' },
+            { label: 'FastAPI Backend (API Gateway)', type: 'API', icon: Server, url: 'https://us-east-2.console.aws.amazon.com/apigateway/main/apis?region=us-east-2' },
+            { label: 'PostgreSQL DB (Aurora)', type: 'Database', icon: Database, url: 'https://us-east-2.console.aws.amazon.com/rds/home?region=us-east-2#databases:' },
+            { label: 'AI Scraper & Analysis (Lambda)', type: 'Compute', icon: CloudCog, url: 'https://us-east-2.console.aws.amazon.com/lambda/home?region=us-east-2#/functions' },
+            { label: 'Message Queues (SQS)', type: 'Events', icon: Activity, url: 'https://us-east-2.console.aws.amazon.com/sqs/v2/home?region=us-east-2#/queues' },
+            { label: 'Storage (S3)', type: 'Buckets', icon: Database, url: 'https://s3.console.aws.amazon.com/s3/home?region=us-east-2' },
+            { label: 'Auth Tenant (Descope)', type: 'Security', icon: Shield, url: 'https://app.descope.com/' },
+            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: 'https://github.com/aambardekar-cola/Compliance/actions' },
         ]
     },
     {
@@ -34,11 +37,14 @@ const ENVIRONMENTS = [
         color: 'var(--color-warning)',
         bg: 'rgba(245, 158, 11, 0.1)',
         resources: [
-            { label: 'Frontend App', type: 'S3/CloudFront', icon: Globe, url: '#' },
-            { label: 'FastAPI Backend', type: 'API Gateway + Lambda', icon: Server, url: '#' },
-            { label: 'PostgreSQL DB', type: 'Aurora Serverless v2', icon: Database, url: '#' },
-            { label: 'Auth Tenant', type: 'Descope', icon: Shield, url: '#' },
-            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: '#' },
+            { label: 'Frontend App (CloudFront)', type: 'CDN', icon: Globe, url: 'https://us-east-2.console.aws.amazon.com/cloudfront/v4/home?region=us-east-2#/distributions' },
+            { label: 'FastAPI Backend (API Gateway)', type: 'API', icon: Server, url: 'https://us-east-2.console.aws.amazon.com/apigateway/main/apis?region=us-east-2' },
+            { label: 'PostgreSQL DB (Aurora)', type: 'Database', icon: Database, url: 'https://us-east-2.console.aws.amazon.com/rds/home?region=us-east-2#databases:' },
+            { label: 'AI Scraper & Analysis (Lambda)', type: 'Compute', icon: CloudCog, url: 'https://us-east-2.console.aws.amazon.com/lambda/home?region=us-east-2#/functions' },
+            { label: 'Message Queues (SQS)', type: 'Events', icon: Activity, url: 'https://us-east-2.console.aws.amazon.com/sqs/v2/home?region=us-east-2#/queues' },
+            { label: 'Storage (S3)', type: 'Buckets', icon: Database, url: 'https://s3.console.aws.amazon.com/s3/home?region=us-east-2' },
+            { label: 'Auth Tenant (Descope)', type: 'Security', icon: Shield, url: 'https://app.descope.com/' },
+            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: 'https://github.com/aambardekar-cola/Compliance/actions' },
         ]
     },
     {
@@ -49,11 +55,14 @@ const ENVIRONMENTS = [
         color: 'var(--color-success)',
         bg: 'rgba(16, 185, 129, 0.1)',
         resources: [
-            { label: 'Frontend App', type: 'S3/CloudFront', icon: Globe, url: '#' },
-            { label: 'FastAPI Backend', type: 'API Gateway + Lambda', icon: Server, url: '#' },
-            { label: 'PostgreSQL DB', type: 'Aurora Serverless v2', icon: Database, url: '#' },
-            { label: 'Auth Tenant', type: 'Descope', icon: Shield, url: '#' },
-            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: '#' },
+            { label: 'Frontend App (CloudFront)', type: 'CDN', icon: Globe, url: 'https://us-east-2.console.aws.amazon.com/cloudfront/v4/home?region=us-east-2#/distributions' },
+            { label: 'FastAPI Backend (API Gateway)', type: 'API', icon: Server, url: 'https://us-east-2.console.aws.amazon.com/apigateway/main/apis?region=us-east-2' },
+            { label: 'PostgreSQL DB (Aurora)', type: 'Database', icon: Database, url: 'https://us-east-2.console.aws.amazon.com/rds/home?region=us-east-2#databases:' },
+            { label: 'AI Scraper & Analysis (Lambda)', type: 'Compute', icon: CloudCog, url: 'https://us-east-2.console.aws.amazon.com/lambda/home?region=us-east-2#/functions' },
+            { label: 'Message Queues (SQS)', type: 'Events', icon: Activity, url: 'https://us-east-2.console.aws.amazon.com/sqs/v2/home?region=us-east-2#/queues' },
+            { label: 'Storage (S3)', type: 'Buckets', icon: Database, url: 'https://s3.console.aws.amazon.com/s3/home?region=us-east-2' },
+            { label: 'Auth Tenant (Descope)', type: 'Security', icon: Shield, url: 'https://app.descope.com/' },
+            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: 'https://github.com/aambardekar-cola/Compliance/actions' },
         ]
     },
     {
@@ -64,11 +73,14 @@ const ENVIRONMENTS = [
         color: 'var(--color-error)',
         bg: 'rgba(239, 68, 68, 0.1)',
         resources: [
-            { label: 'Frontend App', type: 'S3/CloudFront', icon: Globe, url: '#' },
-            { label: 'FastAPI Backend', type: 'API Gateway + Lambda', icon: Server, url: '#' },
-            { label: 'PostgreSQL DB', type: 'Aurora Serverless v2', icon: Database, url: '#' },
-            { label: 'Auth Tenant', type: 'Descope', icon: Shield, url: '#' },
-            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: '#' },
+            { label: 'Frontend App (CloudFront)', type: 'CDN', icon: Globe, url: 'https://us-east-2.console.aws.amazon.com/cloudfront/v4/home?region=us-east-2#/distributions' },
+            { label: 'FastAPI Backend (API Gateway)', type: 'API', icon: Server, url: 'https://us-east-2.console.aws.amazon.com/apigateway/main/apis?region=us-east-2' },
+            { label: 'PostgreSQL DB (Aurora)', type: 'Database', icon: Database, url: 'https://us-east-2.console.aws.amazon.com/rds/home?region=us-east-2#databases:' },
+            { label: 'AI Scraper & Analysis (Lambda)', type: 'Compute', icon: CloudCog, url: 'https://us-east-2.console.aws.amazon.com/lambda/home?region=us-east-2#/functions' },
+            { label: 'Message Queues (SQS)', type: 'Events', icon: Activity, url: 'https://us-east-2.console.aws.amazon.com/sqs/v2/home?region=us-east-2#/queues' },
+            { label: 'Storage (S3)', type: 'Buckets', icon: Database, url: 'https://s3.console.aws.amazon.com/s3/home?region=us-east-2' },
+            { label: 'Auth Tenant (Descope)', type: 'Security', icon: Shield, url: 'https://app.descope.com/' },
+            { label: 'CI/CD Pipeline', type: 'GitHub Actions', icon: Terminal, url: 'https://github.com/aambardekar-cola/Compliance/actions' },
         ]
     }
 ];
