@@ -21,8 +21,8 @@ from sqlalchemy.dialects import postgresql
 
 def upgrade() -> None:
     # We must explicitly create the Enum types in Postgres if they don't exist
-    sa.Enum('IDENTIFIED', 'IN_PROGRESS', 'RESOLVED', 'ACCEPTED_RISK', name='gapstatus').create(op.get_bind(), checkfirst=True)
-    sa.Enum('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', name='gapseverity').create(op.get_bind(), checkfirst=True)
+    sa.Enum('identified', 'in_progress', 'resolved', 'accepted_risk', name='gapstatus').create(op.get_bind(), checkfirst=True)
+    sa.Enum('critical', 'high', 'medium', 'low', name='gapseverity').create(op.get_bind(), checkfirst=True)
 
     op.create_table('compliance_gaps',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
@@ -31,8 +31,8 @@ def upgrade() -> None:
         sa.Column('title', sa.String(length=500), nullable=False),
         sa.Column('description', sa.Text(), nullable=False),
         
-        sa.Column('status', postgresql.ENUM('IDENTIFIED', 'IN_PROGRESS', 'RESOLVED', 'ACCEPTED_RISK', name='gapstatus', create_type=False), server_default='IDENTIFIED', nullable=False),
-        sa.Column('severity', postgresql.ENUM('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', name='gapseverity', create_type=False), nullable=False),
+        sa.Column('status', postgresql.ENUM('identified', 'in_progress', 'resolved', 'accepted_risk', name='gapstatus', create_type=False), server_default='identified', nullable=False),
+        sa.Column('severity', postgresql.ENUM('critical', 'high', 'medium', 'low', name='gapseverity', create_type=False), nullable=False),
         
         sa.Column('affected_modules', postgresql.JSONB(astext_type=sa.Text()), server_default=sa.text("'[]'::jsonb"), nullable=True),
         sa.Column('deadline', sa.Date(), nullable=True),
