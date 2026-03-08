@@ -6,33 +6,33 @@
 /* ---- CSS Variables ---- */
 :root {
   /* Colors — Deep navy/slate palette with vibrant accents */
-  --color-bg-primary: #0a0e1a;
-  --color-bg-secondary: #111827;
-  --color-bg-card: rgba(17, 24, 39, 0.7);
-  --color-bg-card-hover: rgba(30, 41, 59, 0.8);
-  --color-bg-glass: rgba(255, 255, 255, 0.03);
-  --color-bg-input: rgba(255, 255, 255, 0.05);
-  --color-bg-sidebar: rgba(8, 12, 24, 0.95);
+  --color-bg-primary: #15242f;
+  --color-bg-secondary: #1d3342;
+  --color-bg-card: rgba(44, 76, 96, 0.4);
+  --color-bg-card-hover: rgba(44, 76, 96, 0.6);
+  --color-bg-glass: rgba(255, 255, 255, 0.05);
+  --color-bg-input: rgba(44, 76, 96, 0.4);
+  --color-bg-sidebar: rgba(21, 36, 47, 0.95);
 
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-hover: rgba(255, 255, 255, 0.15);
-  --color-border-accent: rgba(99, 102, 241, 0.3);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.2);
+  --color-border-accent: rgba(241, 89, 70, 0.3);
 
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
-  --color-text-accent: #818cf8;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-text-accent: #f15946;
 
   /* Accent gradients */
-  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+  --gradient-primary: linear-gradient(135deg, #f15946 0%, #ff7a63 100%);
   --gradient-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
   --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
   --gradient-danger: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
   --gradient-info: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
 
   /* Flat accent colors */
-  --color-accent: #6366f1;
-  --color-accent-light: #818cf8;
+  --color-accent: #f15946;
+  --color-accent-light: #ff7a63;
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
@@ -45,7 +45,7 @@
   --color-low: #10b981;
 
   /* Typography */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family: 'Source Sans 3', 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.8125rem;
   --font-size-base: 0.875rem;
@@ -77,7 +77,7 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+  --shadow-glow: 0 0 20px rgba(241, 89, 70, 0.25);
 
   /* Transitions */
   --transition-fast: 150ms ease;
@@ -119,9 +119,9 @@ body::before {
   position: fixed;
   inset: 0;
   background: 
-    radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+    radial-gradient(ellipse at 20% 50%, rgba(241, 89, 70, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(44, 76, 96, 0.2) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(241, 89, 70, 0.03) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -334,7 +334,7 @@ a:hover {
 }
 
 .sidebar-link.active {
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(241, 89, 70, 0.1);
   color: var(--color-accent-light);
   border-color: var(--color-border-accent);
 }
@@ -471,7 +471,7 @@ a:hover {
 .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
 .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
 .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
-.badge-accent { background: rgba(99, 102, 241, 0.15); color: var(--color-accent-light); }
+.badge-accent { background: rgba(241, 89, 70, 0.15); color: var(--color-accent-light); }
 
 .badge-dot {
   width: 6px;
@@ -586,7 +586,7 @@ a:hover {
 
 .input-group:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(241, 89, 70, 0.1);
 }
 
 .input-group input {
@@ -729,7 +729,7 @@ a:hover {
   width: 600px;
   height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(241, 89, 70, 0.08) 0%, transparent 70%);
   top: -200px;
   right: -100px;
 }
@@ -740,7 +740,7 @@ a:hover {
   width: 500px;
   height: 500px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(44, 76, 96, 0.2) 0%, transparent 70%);
   bottom: -150px;
   left: -100px;
 }

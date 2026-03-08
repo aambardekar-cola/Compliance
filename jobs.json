@@ -1,0 +1,461 @@
+{
+  "total_count": 4,
+  "jobs": [
+    {
+      "id": 66180547368,
+      "run_id": 22815811251,
+      "workflow_name": "Deploy",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/runs/22815811251",
+      "run_attempt": 1,
+      "node_id": "CR_kwDORgk3ds8AAAAPaKsDKA",
+      "head_sha": "7d9819bdc31f1044d93b6dd4017bff88a537b8fa",
+      "url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/jobs/66180547368",
+      "html_url": "https://github.com/aambardekar-cola/Compliance/actions/runs/22815811251/job/66180547368",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-03-08T06:42:30Z",
+      "started_at": "2026-03-08T06:42:32Z",
+      "completed_at": "2026-03-08T06:42:40Z",
+      "name": "Lint Python",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-03-08T06:42:32Z",
+          "completed_at": "2026-03-08T06:42:33Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-03-08T06:42:33Z",
+          "completed_at": "2026-03-08T06:42:35Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-03-08T06:42:35Z",
+          "completed_at": "2026-03-08T06:42:35Z"
+        },
+        {
+          "name": "Run pip install ruff",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-03-08T06:42:35Z",
+          "completed_at": "2026-03-08T06:42:39Z"
+        },
+        {
+          "name": "Run ruff check backend/",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 5,
+          "started_at": "2026-03-08T06:42:39Z",
+          "completed_at": "2026-03-08T06:42:39Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 9,
+          "started_at": "2026-03-08T06:42:39Z",
+          "completed_at": "2026-03-08T06:42:39Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-03-08T06:42:39Z",
+          "completed_at": "2026-03-08T06:42:39Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-03-08T06:42:39Z",
+          "completed_at": "2026-03-08T06:42:39Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/check-runs/66180547368",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000040,
+      "runner_name": "GitHub Actions 1000000040",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 66180547374,
+      "run_id": 22815811251,
+      "workflow_name": "Deploy",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/runs/22815811251",
+      "run_attempt": 1,
+      "node_id": "CR_kwDORgk3ds8AAAAPaKsDLg",
+      "head_sha": "7d9819bdc31f1044d93b6dd4017bff88a537b8fa",
+      "url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/jobs/66180547374",
+      "html_url": "https://github.com/aambardekar-cola/Compliance/actions/runs/22815811251/job/66180547374",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-03-08T06:42:30Z",
+      "started_at": "2026-03-08T06:42:32Z",
+      "completed_at": "2026-03-08T06:42:53Z",
+      "name": "Lint Frontend",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-03-08T06:42:33Z",
+          "completed_at": "2026-03-08T06:42:34Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-03-08T06:42:34Z",
+          "completed_at": "2026-03-08T06:42:36Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-03-08T06:42:36Z",
+          "completed_at": "2026-03-08T06:42:43Z"
+        },
+        {
+          "name": "Run cd frontend && npm ci --no-audit --no-fund",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-03-08T06:42:43Z",
+          "completed_at": "2026-03-08T06:42:47Z"
+        },
+        {
+          "name": "Run cd frontend && npx eslint src/ --max-warnings=0 || true",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-03-08T06:42:47Z",
+          "completed_at": "2026-03-08T06:42:50Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-03-08T06:42:50Z",
+          "completed_at": "2026-03-08T06:42:50Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-03-08T06:42:50Z",
+          "completed_at": "2026-03-08T06:42:50Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-03-08T06:42:50Z",
+          "completed_at": "2026-03-08T06:42:50Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/check-runs/66180547374",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000041,
+      "runner_name": "GitHub Actions 1000000041",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 66180547375,
+      "run_id": 22815811251,
+      "workflow_name": "Deploy",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/runs/22815811251",
+      "run_attempt": 1,
+      "node_id": "CR_kwDORgk3ds8AAAAPaKsDLw",
+      "head_sha": "7d9819bdc31f1044d93b6dd4017bff88a537b8fa",
+      "url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/jobs/66180547375",
+      "html_url": "https://github.com/aambardekar-cola/Compliance/actions/runs/22815811251/job/66180547375",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-03-08T06:42:30Z",
+      "started_at": "2026-03-08T06:42:32Z",
+      "completed_at": "2026-03-08T06:44:00Z",
+      "name": "Build & Validate",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-03-08T06:42:32Z",
+          "completed_at": "2026-03-08T06:42:34Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-03-08T06:42:34Z",
+          "completed_at": "2026-03-08T06:42:37Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-03-08T06:42:37Z",
+          "completed_at": "2026-03-08T06:42:37Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-03-08T06:42:37Z",
+          "completed_at": "2026-03-08T06:42:39Z"
+        },
+        {
+          "name": "Validate backend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-03-08T06:42:39Z",
+          "completed_at": "2026-03-08T06:42:52Z"
+        },
+        {
+          "name": "Build frontend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-03-08T06:42:52Z",
+          "completed_at": "2026-03-08T06:42:59Z"
+        },
+        {
+          "name": "Upload frontend dist",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-03-08T06:42:59Z",
+          "completed_at": "2026-03-08T06:43:00Z"
+        },
+        {
+          "name": "CDK synth (validate)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-03-08T06:43:00Z",
+          "completed_at": "2026-03-08T06:43:58Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-03-08T06:43:58Z",
+          "completed_at": "2026-03-08T06:43:58Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-03-08T06:43:58Z",
+          "completed_at": "2026-03-08T06:43:58Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-03-08T06:43:58Z",
+          "completed_at": "2026-03-08T06:43:58Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-03-08T06:43:58Z",
+          "completed_at": "2026-03-08T06:43:58Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/check-runs/66180547375",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000042,
+      "runner_name": "GitHub Actions 1000000042",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 66180598499,
+      "run_id": 22815811251,
+      "workflow_name": "Deploy",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/runs/22815811251",
+      "run_attempt": 1,
+      "node_id": "CR_kwDORgk3ds8AAAAPaKvK4w",
+      "head_sha": "7d9819bdc31f1044d93b6dd4017bff88a537b8fa",
+      "url": "https://api.github.com/repos/aambardekar-cola/Compliance/actions/jobs/66180598499",
+      "html_url": "https://github.com/aambardekar-cola/Compliance/actions/runs/22815811251/job/66180598499",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-03-08T06:44:00Z",
+      "started_at": "2026-03-08T06:44:03Z",
+      "completed_at": "2026-03-08T06:46:46Z",
+      "name": "Deploy Dev",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-03-08T06:44:04Z",
+          "completed_at": "2026-03-08T06:44:06Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-03-08T06:44:06Z",
+          "completed_at": "2026-03-08T06:44:08Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-03-08T06:44:08Z",
+          "completed_at": "2026-03-08T06:44:08Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-03-08T06:44:08Z",
+          "completed_at": "2026-03-08T06:44:13Z"
+        },
+        {
+          "name": "Download frontend dist",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-03-08T06:44:13Z",
+          "completed_at": "2026-03-08T06:44:14Z"
+        },
+        {
+          "name": "Configure AWS credentials",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-03-08T06:44:14Z",
+          "completed_at": "2026-03-08T06:44:15Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-03-08T06:44:15Z",
+          "completed_at": "2026-03-08T06:45:02Z"
+        },
+        {
+          "name": "CDK Deploy Explicit Descope Config",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 8,
+          "started_at": "2026-03-08T06:45:02Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Run DB migrations",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 9,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Invalidate CloudFront cache",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 10,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Post Configure AWS credentials",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 18,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 19,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 20,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21,
+          "started_at": "2026-03-08T06:46:43Z",
+          "completed_at": "2026-03-08T06:46:43Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/aambardekar-cola/Compliance/check-runs/66180598499",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000043,
+      "runner_name": "GitHub Actions 1000000043",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}

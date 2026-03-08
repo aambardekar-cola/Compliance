@@ -286,7 +286,7 @@ export default function Login() {
                     /* ---- LIVE DESCOPE ---- */
                     <div className="card" style={{ padding: 'var(--space-6)', minHeight: 400 }}>
                         <Descope
-                            flowId="default-sign-in"
+                            flowId="default-sign-in-register"
                             onSuccess={() => navigate('/')}
                             onError={(e) => console.error('Login error:', e)}
                             theme="dark"

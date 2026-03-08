@@ -9,6 +9,7 @@ import {
     Settings,
     Shield,
     Globe,
+    Server,
 } from 'lucide-react';
 
 const navItems = [
@@ -85,6 +86,13 @@ export default function Sidebar() {
                         >
                             <Globe />
                             <span>Compliance Sources</span>
+                        </NavLink>
+                        <NavLink
+                            to="/admin/environments"
+                            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                        >
+                            <Server />
+                            <span>Environments</span>
                         </NavLink>
                     </div>
                 )}

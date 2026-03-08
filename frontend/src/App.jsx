@@ -10,6 +10,7 @@ import Communications from './pages/Communications';
 import ExecSummary from './pages/ExecSummary';
 import Settings from './pages/Settings';
 import AdminUrls from './pages/AdminUrls';
+import AdminEnvironments from './pages/AdminEnvironments';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isSessionLoading } = useAuthSession();
@@ -48,6 +49,7 @@ function App() {
                 <Route path="/reports" element={<ExecSummary />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin/urls" element={<AdminUrls />} />
+                <Route path="/admin/environments" element={<AdminEnvironments />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
