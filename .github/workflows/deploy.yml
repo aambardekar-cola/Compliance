@@ -93,8 +93,16 @@ jobs:
           python -c "from shared.config import Settings; print('Config OK')"
           python -c "from shared.models import Base; print('Models OK')"
 
-      # Frontend build
+      # Cache & Build Frontend
+      - name: Cache frontend dist
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: frontend/dist
+          key: frontend-dist-${{ hashFiles('frontend/src/**', 'frontend/package*.json', 'frontend/vite.config.js') }}
+
       - name: Build frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         run: |
           cd frontend
           npm ci --no-audit --no-fund
@@ -107,14 +115,25 @@ jobs:
           path: frontend/dist/
           retention-days: 1
 
-      # CDK synth
-      - name: CDK synth (validate)
+      # Cache & Build Backend Layer
+      - name: Cache backend layer
+        id: cache-backend
+        uses: actions/cache@v4
+        with:
+          path: backend/layer
+          key: backend-layer-${{ hashFiles('scripts/build-layer.sh', 'backend/requirements.txt') }}
+
+      - name: Build backend layer
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
-          pip install aws-cdk-lib constructs boto3
-          pip install -r infrastructure/requirements.txt
-          npm install -g aws-cdk
           bash scripts/build-layer.sh
-          cd infrastructure && cdk synth -c env=dev --quiet
+
+      - name: Upload backend layer
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-layer
+          path: backend/layer/
+          retention-days: 1
 
   # ============================================================================
   # DEPLOY: Dev (automatic on push to main)
@@ -139,6 +158,11 @@ jobs:
         with:
           name: frontend-dist
           path: frontend/dist/
+      - name: Download backend layer
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-layer
+          path: backend/layer/
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -150,7 +174,6 @@ jobs:
           pip install aws-cdk-lib constructs boto3
           pip install -r infrastructure/requirements.txt
           npm install -g aws-cdk
-          bash scripts/build-layer.sh
       - name: CDK Deploy Explicit Descope Config
         run: |
           cd infrastructure
