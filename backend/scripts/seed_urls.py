@@ -6,6 +6,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy import select
 from shared.config import settings
 from shared.models import ComplianceRuleUrl
 
@@ -35,6 +36,14 @@ async def seed_data():
     async with AsyncSessionLocal() as session:
         print("Starting seed of ComplianceRuleUrl...")
         for item in SEED_URLS:
+            stmt = select(ComplianceRuleUrl).where(ComplianceRuleUrl.url == item["url"])
+            result = await session.execute(stmt)
+            existing = result.scalars().first()
+            
+            if existing:
+                print(f"Skipping already seeded URL: {item['url']}")
+                continue
+                
             rule = ComplianceRuleUrl(
                 name=item["name"],
                 url=item["url"],
