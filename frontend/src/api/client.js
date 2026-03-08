@@ -7,7 +7,8 @@ const API_BASE = window.ENV?.API_URL || import.meta.env.VITE_API_URL || 'http://
 
 class ApiClient {
     constructor() {
-        this.baseUrl = API_BASE;
+        // Strip out any trailing slashes to prevent double-slashes when appending routes
+        this.baseUrl = API_BASE.replace(/\/$/, '');
         this.token = null;
     }
 

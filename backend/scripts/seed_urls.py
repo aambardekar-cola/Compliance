@@ -7,8 +7,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select
-from shared.config import settings
+from shared.config import get_settings
 from shared.models import ComplianceRuleUrl
+
+settings = get_settings()
 
 # Re-use the engine setup from api/main.py
 engine = create_async_engine(settings.DATABASE_URL, echo=True)
