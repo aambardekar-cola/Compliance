@@ -43,13 +43,13 @@ app.add_middleware(
 )
 
 # ---- Routes ----
-app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
-app.include_router(regulations.router, prefix="/api", tags=["Regulations"])
-app.include_router(gaps.router, prefix="/api", tags=["Gap Analysis"])
-app.include_router(communications.router, prefix="/api", tags=["Communications"])
-app.include_router(reports.router, prefix="/api", tags=["Reports"])
-app.include_router(subscriptions.router, prefix="/api", tags=["Subscriptions"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(dashboard.router, tags=["Dashboard"])
+app.include_router(regulations.router, tags=["Regulations"])
+app.include_router(gaps.router, tags=["Gap Analysis"])
+app.include_router(communications.router, tags=["Communications"])
+app.include_router(reports.router, tags=["Reports"])
+app.include_router(subscriptions.router, tags=["Subscriptions"])
+app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
 
 # ---- Lifecycle Events ----

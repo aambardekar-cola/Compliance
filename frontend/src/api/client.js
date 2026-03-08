@@ -2,8 +2,7 @@
  * API client for the PCO Compliance backend.
  */
 
-// Use window.ENV (injected at runtime via script), then fallback to VITE_API_URL, then hardcoded dev URL.
-const API_BASE = window.ENV?.API_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE = window.ENV?.API_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiClient {
     constructor() {

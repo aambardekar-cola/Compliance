@@ -58,6 +58,13 @@ async def get_engine():
         else:
             database_url = settings.database_url
             
+        connect_args = {}
+        if "postgresql" in database_url:
+            connect_args = {
+                "prepared_statement_cache_size": 0,
+                "statement_cache_size": 0
+            }
+            
         _engine = create_async_engine(
             database_url,
             echo=get_settings().log_level == "DEBUG",
@@ -65,6 +72,7 @@ async def get_engine():
             max_overflow=10,
             pool_pre_ping=True,
             pool_recycle=300,  # Recycle connections every 5 minutes
+            connect_args=connect_args
         )
     return _engine
 
