@@ -36,6 +36,7 @@ export default function Dashboard() {
         regulations: { total: 12, proposed: 3, comment_period: 2, final_rule: 5, effective: 2, avg_relevance: 0.78 },
         gaps: { total: 24, critical: 3, high: 7, open: 14, resolved: 10, total_effort_hours: 320 },
         communications: { total: 8, drafts: 2, pending_approval: 1, sent: 5 },
+        isMock: true,
     };
     
     // AI generated gaps from DB
@@ -44,7 +45,10 @@ export default function Dashboard() {
     return (
         <div className="animate-in">
             <div className="page-header">
-                <h1 className="page-title">Compliance Dashboard</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <h1 className="page-title">Compliance Dashboard</h1>
+                    {dashboard.isMock && <span className="badge badge-medium">MOCK DATA</span>}
+                </div>
                 <p className="page-description">
                     Real-time overview of PACE regulatory compliance posture for PaceCareOnline
                 </p>

@@ -9,27 +9,27 @@ const MOCK_REGULATIONS = [
     {
         id: '1', source: 'Federal Register', title: 'CY2026 PACE Final Rule — Service Delivery Timeframes & Care Coordination',
         summary: 'Establishes new maximum timeframes for service delivery, including 24-hour medication dispensing and 7-day service arrangement.',
-        relevance_score: 0.95, status: 'final_rule', effective_date: '2026-01-01', agencies: ['CMS'], affected_areas: ['care_planning', 'service_delivery'],
+        relevance_score: 0.95, status: 'final_rule', effective_date: '2026-01-01', agencies: ['CMS'], affected_areas: ['care_planning', 'service_delivery'], isMock: true,
     },
     {
         id: '2', source: 'Federal Register', title: 'PACE Participant Rights and Grievance Process Updates',
         summary: 'New formalized grievance process with 30-day resolution requirement. Disclosure of performance deficiencies to participants.',
-        relevance_score: 0.88, status: 'effective', effective_date: '2025-01-01', agencies: ['CMS'], affected_areas: ['participant_rights', 'grievances'],
+        relevance_score: 0.88, status: 'effective', effective_date: '2025-01-01', agencies: ['CMS'], affected_areas: ['participant_rights', 'grievances'], isMock: true,
     },
     {
         id: '3', source: 'Federal Register', title: 'Interoperability and Prior Authorization API Requirements for PACE',
         summary: 'Mandates standards-based APIs for health data sharing. Patient access API and provider directory API requirements.',
-        relevance_score: 0.82, status: 'proposed', effective_date: '2026-07-01', agencies: ['CMS', 'HHS'], affected_areas: ['interoperability', 'api'],
+        relevance_score: 0.82, status: 'proposed', effective_date: '2026-07-01', agencies: ['CMS', 'HHS'], affected_areas: ['interoperability', 'api'], isMock: true,
     },
     {
         id: '4', source: 'CMS', title: 'Personnel Medical Clearance Requirements for PACE Organizations',
         summary: 'Comprehensive medical clearance processes for staff with direct participant contact, including individual risk assessments.',
-        relevance_score: 0.79, status: 'effective', effective_date: '2025-01-01', agencies: ['CMS'], affected_areas: ['personnel', 'compliance'],
+        relevance_score: 0.79, status: 'effective', effective_date: '2025-01-01', agencies: ['CMS'], affected_areas: ['personnel', 'compliance'], isMock: true,
     },
     {
         id: '5', source: 'Federal Register', title: 'PACE Application Evaluation and Compliance Actions Update',
         summary: 'Additional grounds for denying PACE applications. Point thresholds for compliance actions on deficiencies.',
-        relevance_score: 0.71, status: 'final_rule', effective_date: '2025-07-01', agencies: ['CMS'], affected_areas: ['enrollment', 'compliance'],
+        relevance_score: 0.71, status: 'final_rule', effective_date: '2025-07-01', agencies: ['CMS'], affected_areas: ['enrollment', 'compliance'], isMock: true,
     },
 ];
 
@@ -110,6 +110,9 @@ export default function Regulations() {
                                         <div style={{ maxWidth: 400 }}>
                                             <div style={{ color: 'var(--color-text-primary)', fontWeight: 500, marginBottom: 4 }}>
                                                 {reg.title}
+                                                {reg.isMock && (
+                                                    <span className="badge badge-medium" style={{ marginLeft: '8px', fontSize: '10px' }}>MOCK</span>
+                                                )}
                                             </div>
                                             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
                                                 {reg.summary?.slice(0, 100)}...
