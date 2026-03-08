@@ -58,7 +58,7 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        return self.app_env == "production"
+        return self.app_env in ("production", "prod", "dev", "staging", "demo")
 
     @property
     def gitlab_project_id_list(self) -> list[int]:
