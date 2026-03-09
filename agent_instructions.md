@@ -9,3 +9,11 @@
 ## 2. Admin Infrastructure Page Updates
 - **Rule**: Whenever new AWS infrastructure is added (e.g., a new S3 bucket, a new Lambda function, an SQS queue, changes to CDK outputs), the agent MUST immediately update the corresponding "Environments" Admin page in the frontend UI to display this new infrastructure.
 - **Reason**: The internal Admin UI must always serve as an accurate, living dashboard of the current AWS deployment state. If the CDK stack changes, the UI displaying that stack must change in the same PR.
+
+## 3. Reliability & Testing
+- **Rule**: ALWAYS test code locally (syntax check, dry-run, or unit test) BEFORE pushing to Git.
+- **Rule**: If a mistake is made twice, or a similar error occurs twice, the agent MUST implement logic or safeguards to ensure it NEVER repeats.
+- **Rule**: ALWAYS write unit tests for all new code. This is **non-negotiable**.
+
+## 4. Environment Dependencies
+- **Rule**: Do not assume existence of the GitHub CLI (`gh`). If you need to check workflow status, use `curl` with the GitHub API as a fallback. If a system tool is missing, document the workaround here to fix it "once for all".
