@@ -63,7 +63,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if not is_prod and token in mock_users:
             request.state.user = mock_users[token]
-            return await call_next(request)
+            try:
+                return await call_next(request)
+            except Exception as e:
+                import traceback
+                return JSONResponse(status_code=500, content={"detail": "DB Crash", "error": str(e), "trace": traceback.format_exc()})
         
         # --- Real Descope Auth ---
         try:
@@ -77,7 +81,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Invalid or expired token"},
             )
 
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        except Exception as e:
+            import traceback
+            return JSONResponse(status_code=500, content={"detail": "DB Crash", "error": str(e), "trace": traceback.format_exc()})
 
 
 def get_current_user(request: Request) -> CurrentUser:
