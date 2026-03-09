@@ -186,3 +186,27 @@ async def trigger_scraper_manually():
     except Exception as e:
         await logger.error(f"Failed to trigger scraper: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/verify-modules", dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
+async def verify_modules():
+    """Check if backend modules are importable (for debugging Lambda environment)."""
+    results = {}
+    modules_to_check = [
+        "shared.db",
+        "shared.models",
+        "shared.logging",
+        "lambdas.scraper.main",
+        "analysis.handler"
+    ]
+    
+    import traceback
+    import importlib
+    
+    for mod_name in modules_to_check:
+        try:
+            importlib.import_module(mod_name)
+            results[mod_name] = "OK"
+        except Exception:
+            results[mod_name] = traceback.format_exc()
+            
+    return results
