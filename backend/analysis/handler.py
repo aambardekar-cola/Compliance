@@ -14,6 +14,7 @@ from datetime import datetime
 
 import boto3
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from shared.db import get_db_session
 from shared.models import (
@@ -214,7 +215,9 @@ async def process_scraped_content(content_id: UUID) -> bool:
     async with get_db_session() as session:
         # 1. Fetch the content
         result = await session.execute(
-            select(ScrapedContent).where(ScrapedContent.id == content_id)
+            select(ScrapedContent)
+            .options(joinedload(ScrapedContent.rule_url))
+            .where(ScrapedContent.id == content_id)
         )
         content = result.scalar_one_or_none()
         
@@ -254,8 +257,11 @@ async def process_scraped_content(content_id: UUID) -> bool:
 
             # Get source URL from the parent ComplianceRuleUrl for regulation metadata
             source_url = ""
-            if content.rule_url:
-                source_url = content.rule_url.url or ""
+            try:
+                if content.rule_url:
+                    source_url = content.rule_url.url or ""
+            except Exception:
+                pass  # Relationship not loaded — not critical
             
             for i in range(start_chunk, end_chunk):
                 chunk = chunks[i]
