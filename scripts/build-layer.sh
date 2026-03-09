@@ -25,6 +25,7 @@ pip3 install \
     typing_extensions annotated-types \
     anyio sniffio idna certifi \
     starlette Mako MarkupSafe \
+    beautifulsoup4 lxml \
     2>&1 | tail -5
 
 # Also install packages that may not have pre-built wheels
