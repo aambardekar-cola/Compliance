@@ -51,8 +51,8 @@ async def list_gaps(
     query = (
         query
         .order_by(
-            desc(ComplianceGap.severity == GapSeverity.CRITICAL),
-            desc(ComplianceGap.severity == GapSeverity.HIGH),
+            desc(ComplianceGap.severity == GapSeverity.CRITICAL.value),
+            desc(ComplianceGap.severity == GapSeverity.HIGH.value),
             desc(ComplianceGap.created_at),
         )
         .offset((page - 1) * page_size)
