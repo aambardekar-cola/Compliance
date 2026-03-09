@@ -84,6 +84,13 @@ pipeline_stack = PipelineStack(
 )
 pipeline_stack.add_dependency(data_stack)
 
+# Wire the analysis queue URL into the API Lambda so the admin
+# trigger-analysis endpoint can re-queue unprocessed content.
+api_stack.api_lambda.add_environment(
+    "ANALYSIS_QUEUE_URL", pipeline_stack.analysis_queue.queue_url
+)
+pipeline_stack.analysis_queue.grant_send_messages(api_stack.api_lambda)
+
 # --- Notification Layer ---
 notification_stack = NotificationStack(
     app,
