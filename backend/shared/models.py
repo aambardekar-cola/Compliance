@@ -54,6 +54,14 @@ class GapStatus(str, PyEnum):
     ACCEPTED_RISK = "accepted_risk"
 
 
+class AffectedLayer(str, PyEnum):
+    """Which application layer a compliance gap affects."""
+    FRONTEND = "frontend"
+    BACKEND = "backend"
+    BOTH = "both"
+    UNKNOWN = "unknown"
+
+
 class CommunicationStatus(str, PyEnum):
     """Status of a client communication."""
     DRAFT = "draft"
@@ -151,6 +159,7 @@ class ComplianceGap(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     scraped_content_id = Column(UUID(as_uuid=True), ForeignKey("scraped_content.id", ondelete="CASCADE"), nullable=False)
+    regulation_id = Column(UUID(as_uuid=True), ForeignKey("regulations.id", ondelete="SET NULL"), nullable=True)
     
     # AI Extracted Fields
     title = Column(String(500), nullable=False)
@@ -158,6 +167,7 @@ class ComplianceGap(Base):
     status = Column(Enum(GapStatus, values_callable=lambda x: [e.value for e in x]), default=GapStatus.IDENTIFIED, nullable=False)
     severity = Column(Enum(GapSeverity, values_callable=lambda x: [e.value for e in x]), nullable=False)
     affected_modules = Column(JSON, nullable=True)  # List of PCO app modules affected
+    affected_layer = Column(Enum(AffectedLayer, values_callable=lambda x: [e.value for e in x]), default=AffectedLayer.UNKNOWN, nullable=False)
     deadline = Column(Date, nullable=True)
     
     is_new_requirement = Column(Boolean, default=False)
@@ -168,9 +178,11 @@ class ComplianceGap(Base):
 
     # Relationships
     scraped_content = relationship("ScrapedContent", back_populates="gaps")
+    regulation = relationship("Regulation", back_populates="compliance_gaps")
 
     __table_args__ = (
         Index("ix_comp_gaps_scraped", "scraped_content_id"),
+        Index("ix_comp_gaps_regulation", "regulation_id"),
         Index("ix_comp_gaps_status", "status"),
         Index("ix_comp_gaps_severity", "severity"),
     )
@@ -181,6 +193,7 @@ class Regulation(Base):
     __tablename__ = "regulations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scraped_content_id = Column(UUID(as_uuid=True), ForeignKey("scraped_content.id", ondelete="SET NULL"), nullable=True)
     source = Column(String(100), nullable=False)  # e.g., "cms_gov", "federal_register"
     source_id = Column(String(500), nullable=True)  # External reference ID
     title = Column(String(1000), nullable=False)
@@ -191,7 +204,7 @@ class Regulation(Base):
     # AI Analysis
     ai_analysis = Column(JSON, default=dict)  # Structured AI analysis output
     relevance_score = Column(Float, nullable=True)  # AI-determined relevance matching PCO domains
-    affected_areas = Column(JSON, default=list)  # List of affected EHR areas
+    affected_areas = Column(JSON, default=list)  # PCO modules: IDT, Care Plan, Pharmacy, etc.
     key_requirements = Column(JSON, default=list)  # Extracted requirements
 
     # Status & Timeline
@@ -204,11 +217,14 @@ class Regulation(Base):
     cfr_references = Column(JSON, default=list)  # e.g., ["42 CFR 460"]
     agencies = Column(JSON, default=list)  # e.g., ["CMS", "HHS"]
     document_type = Column(String(100), nullable=True)  # "proposed_rule", "final_rule", "guidance"
+    document_chunk_hash = Column(String(64), nullable=True)  # SHA-256 for dedup
 
     ingested_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    scraped_content = relationship("ScrapedContent", backref="regulations")
+    compliance_gaps = relationship("ComplianceGap", back_populates="regulation")
     gap_analyses = relationship("GapAnalysis", back_populates="regulation", cascade="all, delete-orphan")
     communications = relationship("Communication", back_populates="regulation")
 

@@ -1,4 +1,9 @@
-"""Lambda handler for AI gap analysis using AWS Bedrock."""
+"""Lambda handler for AI gap analysis using AWS Bedrock.
+
+Phase 2: Two-stage extraction pipeline.
+  Stage 1 — Extract Regulations from raw text (title, CFR citation, affected areas)
+  Stage 2 — Identify Compliance Gaps per regulation (PACE-specific gaps)
+"""
 import asyncio
 import json
 import os
@@ -11,13 +16,15 @@ import boto3
 from sqlalchemy import select
 
 from shared.db import get_db_session
-from shared.models import ScrapedContent, ComplianceGap, GapSeverity, GapStatus
+from shared.models import (
+    ScrapedContent, ComplianceGap, Regulation,
+    GapSeverity, GapStatus, AffectedLayer, RegulationStatus,
+)
 from shared.logging import get_pipeline_logger
 
 logger = get_pipeline_logger("analysis")
 
 # Hybrid Bedrock Architecture: Haiku for filtering, Sonnet for deep extraction
-# Model IDs are configurable via Lambda environment variables
 HAIKU_MODEL_ID = os.environ.get(
     "BEDROCK_HAIKU_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
@@ -35,32 +42,68 @@ MAX_CONTENT_CHARS = 50000
 # Max chunks to process per Lambda invocation (prevents timeout; resumes on next trigger)
 MAX_CHUNKS_PER_RUN = int(os.environ.get("MAX_CHUNKS_PER_RUN", "10"))
 
-SYSTEM_PROMPT = """
+# Canonical list of PCO modules for consistent tagging
+PCO_MODULES = [
+    "IDT", "Care Plan", "Pharmacy", "Enrollment", "Claims",
+    "Transportation", "Quality", "Billing", "Authorization",
+    "Member Services", "Provider Network", "Reporting",
+    "Administration",
+]
+
+# ---------- PROMPTS ----------
+
+REGULATION_EXTRACTION_PROMPT = """
 You are an expert PACE (Programs of All-Inclusive Care for the Elderly) compliance officer.
-PaceCareOnline (PCO) is a software platform managing PACE organizations. The software is divided into these core modules:
-1. Care Planning
-2. Interdisciplinary Team (IDT)
-3. Medicare Part D / Pharmacy
-4. Claims Processing
-5. Participant Enrollment
-6. Quality Improvement
-7. Administration & Reporting
+PaceCareOnline (PCO) is a PACE EHR software platform with these core modules:
+""" + ", ".join(PCO_MODULES) + """
 
-I will provide you with chunks of raw legal text from the Federal Register or eCFR.
-Your job is to read the text and identify actionable compliance requirements or rule changes that would affect a PACE organization using our software.
+I will provide a chunk of raw legal text from the Federal Register or eCFR.
+Your job is to extract distinct REGULATORY REQUIREMENTS from the text.
 
-Analyze the text and output a valid JSON array of objects. If there are no actionable gaps, output an empty array [].
-For each requirement found, provide:
-- "title": A short, clear title of the requirement (string, max 500 chars)
-- "description": A detailed explanation of what must change (string)
-- "severity": Must be exactly one of: "CRITICAL", "HIGH", "MEDIUM", "LOW"
-- "affected_modules": A list of strings matching the core modules above (e.g. ["Care Planning", "IDT"])
-- "is_new_requirement": Boolean (true if this is a new change, false if it's existing/restated)
-- "requirement": The specific regulatory requirement text (string)
-- "citation": The citation for the requirement (string)
+For each regulation found, provide:
+- "title": A clear, concise title of the regulatory requirement (max 200 chars)
+- "summary": 2-3 sentence summary of what the regulation requires
+- "cfr_citation": The CFR citation if available (e.g. "42 CFR §460.102"), or "" if none
+- "affected_areas": A list of PCO modules this regulation impacts. ONLY use values from: """ + json.dumps(PCO_MODULES) + """
+- "effective_date": The effective date in ISO format (YYYY-MM-DD) if mentioned, or null
+- "document_type": One of: "proposed_rule", "final_rule", "guidance", "notice"
+- "key_requirements": A list of 1-3 specific actionable requirements (strings)
 
-Return ONLY valid JSON.
+Rules:
+- Each regulation should be a DISTINCT regulatory requirement, not a restatement
+- If the text discusses multiple separate requirements, extract each as its own regulation
+- If no actionable regulations are found, return an empty array []
+- Return ONLY valid JSON array
+
+Output format: [{"title": "...", "summary": "...", ...}, ...]
 """
+
+GAP_IDENTIFICATION_PROMPT = """
+You are an expert PACE compliance gap analyst for PaceCareOnline (PCO), a PACE EHR platform.
+PCO modules: """ + ", ".join(PCO_MODULES) + """
+
+Given a specific regulatory requirement, identify compliance GAPS — places where a PACE
+organization's EHR software might NOT meet this requirement.
+
+For each gap, provide:
+- "title": A clear, actionable title describing the gap (max 200 chars)
+- "description": Detailed explanation of what needs to change
+- "severity": One of: "CRITICAL", "HIGH", "MEDIUM", "LOW"
+- "affected_modules": PCO modules affected. ONLY use values from: """ + json.dumps(PCO_MODULES) + """
+- "affected_layer": Where the fix is needed. One of: "frontend", "backend", "both", "unknown"
+- "is_new_requirement": true if this is a new requirement, false if restated
+
+Rules:
+- Focus on actionable gaps that require software changes
+- If the regulation is purely administrative (no software impact), return an empty array []
+- Return ONLY valid JSON array
+
+Output format: [{"title": "...", "description": "...", ...}, ...]
+"""
+
+# Legacy prompt kept for reference (Phase 1.5 single-stage extraction)
+SYSTEM_PROMPT = REGULATION_EXTRACTION_PROMPT
+
 
 async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: int = 4096) -> str:
     """Helper to invoke AWS Bedrock Claude 3 models."""
@@ -91,7 +134,6 @@ async def filter_relevant_content(text: str) -> bool:
     Uses a truncated sample for large documents to stay within context limits.
     """
     await logger.info("Executing Pass 1 (Haiku Filtering)...")
-    # Use a sample for very large docs
     sample = text[:MAX_CONTENT_CHARS] if len(text) > MAX_CONTENT_CHARS else text
     filter_prompt = f"Does the following regulatory text contain any actionable compliance requirements, changes, or mandates that would affect a PACE organization? Respond with ONLY the word YES or NO. Do not explain.\n\n<TEXT>\n{sample}\n</TEXT>"
     filter_system = "You are a fast legal filter. You only respond with YES or NO."
@@ -110,7 +152,6 @@ def chunk_text(text: str, chunk_size: int = MAX_CONTENT_CHARS) -> List[str]:
         if len(text) <= chunk_size:
             chunks.append(text)
             break
-        # Find a paragraph break near the chunk boundary
         split_at = text.rfind("\n\n", 0, chunk_size)
         if split_at == -1:
             split_at = text.rfind("\n", 0, chunk_size)
@@ -121,45 +162,52 @@ def chunk_text(text: str, chunk_size: int = MAX_CONTENT_CHARS) -> List[str]:
     return chunks
 
 
-async def extract_compliance_gaps(text: str) -> List[Dict]:
-    """Pass 2: Sonnet Extraction - extracts compliance gaps.
+def parse_json_response(raw: str) -> list:
+    """Safely parse LLM JSON output, stripping markdown fences."""
+    if "```json" in raw:
+        raw = raw.split("```json")[-1].split("```")[0].strip()
+    elif "```" in raw:
+        raw = raw.split("```")[-1].split("```")[0].strip()
     
-    Chunks large documents and processes each chunk separately.
-    """
-    await logger.info("Executing Pass 2 (Sonnet Deep Extraction)...")
-    chunks = chunk_text(text)
-    await logger.info(f"Processing {len(chunks)} chunk(s) through Sonnet")
-    
-    all_gaps = []
-    for i, chunk in enumerate(chunks):
-        await logger.info(f"Analyzing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
-        extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{chunk}\n</TEXT>"
-        
-        content = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=8192)
-        
-        # Strip potential markdown formatting from LLM output
-        if "```json" in content:
-            content = content.split("```json")[-1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[-1].split("```")[0].strip()
-            
-        try:
-            gaps = json.loads(content)
-            if isinstance(gaps, list):
-                all_gaps.extend(gaps)
-            elif isinstance(gaps, dict) and "gaps" in gaps:
-                all_gaps.extend(gaps["gaps"])
-        except json.JSONDecodeError as e:
-            await logger.error(f"Failed to parse JSON from chunk {i+1}: {e}. Raw: {content[:300]}...")
-    
-    return all_gaps
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return parsed
+        elif isinstance(parsed, dict):
+            # Handle {"regulations": [...]} or {"gaps": [...]} wrappers
+            for key in ("regulations", "gaps", "items", "results"):
+                if key in parsed and isinstance(parsed[key], list):
+                    return parsed[key]
+            return [parsed]  # Single object → wrap in list
+        return []
+    except json.JSONDecodeError:
+        return []
+
+
+def safe_severity(val: Any) -> GapSeverity:
+    """Parse severity with defensive fallback to MEDIUM."""
+    try:
+        return GapSeverity(str(val or "medium").lower())
+    except (ValueError, KeyError):
+        return GapSeverity.MEDIUM
+
+
+def safe_affected_layer(val: Any) -> AffectedLayer:
+    """Parse affected_layer with defensive fallback to UNKNOWN."""
+    try:
+        return AffectedLayer(str(val or "unknown").lower())
+    except (ValueError, KeyError):
+        return AffectedLayer.UNKNOWN
 
 
 async def process_scraped_content(content_id: UUID) -> bool:
-    """Run the two-pass AI analysis on a piece of scraped content.
+    """Run the two-stage AI analysis on a piece of scraped content.
     
-    Supports incremental processing: gaps are saved per-chunk and progress
-    is tracked so processing resumes from where it left off on retry.
+    Stage 1: Extract Regulations from each chunk
+    Stage 2: Identify Compliance Gaps per regulation
+    
+    Supports incremental processing: progress is tracked per-chunk and
+    processing resumes from where it left off on retry.
     """
     await logger.info(f"Starting AI analysis for ScrapedContent {content_id}")
     
@@ -179,72 +227,165 @@ async def process_scraped_content(content_id: UUID) -> bool:
             return True
 
         try:
-            # Pass 1: Filtering (Haiku) — skip if we already have progress (means filtering passed)
+            # Pass 1: Filtering (Haiku) — skip if we already have progress
             if not content.chunks_processed or content.chunks_processed == 0:
                 await logger.info(f"Pass 1: Filtering content with Claude 3 Haiku", {"length": len(content.content_text)})
                 is_relevant = await filter_relevant_content(content.content_text)
                 
                 if not is_relevant:
-                    await logger.info(f"Content identified as irrelevant, skipping Pass 2")
+                    await logger.info(f"Content identified as irrelevant, skipping analysis")
                     content.is_processed = True
                     await session.commit()
                     return True
             else:
-                await logger.info(f"Resuming Pass 2 from chunk {content.chunks_processed + 1}")
+                await logger.info(f"Resuming from chunk {content.chunks_processed + 1}")
 
-            # Pass 2: Chunked Extraction (Sonnet) — with per-chunk persistence
-            await logger.info(f"Pass 2: Extracting gaps with Claude 3.5 Sonnet")
+            # Pass 2: Two-stage chunked extraction with per-chunk persistence
+            await logger.info(f"Pass 2: Two-stage extraction (Regulations → Gaps)")
             chunks = chunk_text(content.content_text)
             total = len(chunks)
             start_chunk = content.chunks_processed or 0
             
-            # Save total chunks count
             content.total_chunks = total
             await session.commit()
             
             end_chunk = min(start_chunk + MAX_CHUNKS_PER_RUN, total)
-            await logger.info(f"Processing chunks {start_chunk + 1}-{end_chunk}/{total} through Sonnet (max {MAX_CHUNKS_PER_RUN}/run)")
+            await logger.info(f"Processing chunks {start_chunk + 1}-{end_chunk}/{total} (max {MAX_CHUNKS_PER_RUN}/run)")
+
+            # Get source URL from the parent ComplianceRuleUrl for regulation metadata
+            source_url = ""
+            if content.rule_url:
+                source_url = content.rule_url.url or ""
             
             for i in range(start_chunk, end_chunk):
                 chunk = chunks[i]
-                await logger.info(f"Analyzing chunk {i+1}/{total} ({len(chunk)} chars)")
-                extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{chunk}\n</TEXT>"
+                chunk_hash = hashlib.sha256(chunk.encode()).hexdigest()[:16]
+                await logger.info(f"Chunk {i+1}/{total} ({len(chunk)} chars)")
                 
-                raw = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=8192)
+                # --- STAGE 1: Extract Regulations from this chunk ---
+                reg_prompt = f"Extract all distinct regulatory requirements from the following text:\n\n<TEXT>\n{chunk}\n</TEXT>"
+                raw_regs = await invoke_bedrock(
+                    model_id=SONNET_MODEL_ID,
+                    system=REGULATION_EXTRACTION_PROMPT,
+                    prompt=reg_prompt,
+                    max_tokens=8192
+                )
+                reg_list = parse_json_response(raw_regs)
                 
-                # Strip markdown formatting
-                if "```json" in raw:
-                    raw = raw.split("```json")[-1].split("```")[0].strip()
-                elif "```" in raw:
-                    raw = raw.split("```")[-1].split("```")[0].strip()
+                if not reg_list:
+                    await logger.info(f"Chunk {i+1}: no regulations found, skipping")
+                    content.chunks_processed = i + 1
+                    await session.commit()
+                    continue
                 
-                # Parse and persist gaps from this chunk immediately
-                try:
-                    gaps = json.loads(raw)
-                    gap_list = gaps if isinstance(gaps, list) else gaps.get("gaps", []) if isinstance(gaps, dict) else []
+                await logger.info(f"Chunk {i+1}: found {len(reg_list)} regulation(s)")
+                
+                chunk_regulations = []
+                for reg_dict in reg_list:
+                    if not isinstance(reg_dict, dict):
+                        continue
+                    
+                    title = str(reg_dict.get("title", ""))[:1000]
+                    if not title:
+                        continue
+                    
+                    cfr = str(reg_dict.get("cfr_citation", ""))[:200]
+                    doc_hash = hashlib.sha256(f"{cfr}|{title}".encode()).hexdigest()
+                    
+                    # Dedup: check if this regulation already exists by chunk hash
+                    existing = await session.execute(
+                        select(Regulation).where(
+                            Regulation.document_chunk_hash == doc_hash
+                        )
+                    )
+                    existing_reg = existing.scalar_one_or_none()
+                    
+                    if existing_reg:
+                        await logger.info(f"  Regulation already exists: {title[:80]}")
+                        chunk_regulations.append(existing_reg)
+                        continue
+                    
+                    # Parse effective_date safely
+                    eff_date = None
+                    raw_date = reg_dict.get("effective_date")
+                    if raw_date:
+                        try:
+                            eff_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Normalize affected_areas to canonical PCO modules
+                    raw_areas = reg_dict.get("affected_areas", [])
+                    if not isinstance(raw_areas, list):
+                        raw_areas = []
+                    affected_areas = [a for a in raw_areas if a in PCO_MODULES]
+                    
+                    new_reg = Regulation(
+                        scraped_content_id=content.id,
+                        source="federal_register",
+                        source_id=cfr or None,
+                        title=title,
+                        summary=str(reg_dict.get("summary", ""))[:5000],
+                        source_url=source_url,
+                        relevance_score=0.8,  # High relevance — passed Haiku filter
+                        affected_areas=affected_areas,
+                        key_requirements=reg_dict.get("key_requirements", []),
+                        status=RegulationStatus.PROPOSED,
+                        effective_date=eff_date,
+                        document_type=str(reg_dict.get("document_type", "final_rule"))[:100],
+                        cfr_references=[cfr] if cfr else [],
+                        agencies=["CMS"],
+                        document_chunk_hash=doc_hash,
+                    )
+                    session.add(new_reg)
+                    await session.flush()  # Get the ID
+                    chunk_regulations.append(new_reg)
+                    await logger.info(f"  + Regulation saved: {title[:80]}")
+                
+                # --- STAGE 2: Identify Gaps per Regulation ---
+                total_gaps = 0
+                for reg in chunk_regulations:
+                    gap_prompt = (
+                        f"Given this regulatory requirement, identify compliance gaps:\n\n"
+                        f"REGULATION: {reg.title}\n"
+                        f"SUMMARY: {reg.summary or 'N/A'}\n"
+                        f"CFR: {reg.source_id or 'N/A'}\n"
+                        f"AFFECTED AREAS: {', '.join(reg.affected_areas or [])}\n"
+                        f"KEY REQUIREMENTS: {json.dumps(reg.key_requirements or [])}\n"
+                    )
+                    
+                    raw_gaps = await invoke_bedrock(
+                        model_id=SONNET_MODEL_ID,
+                        system=GAP_IDENTIFICATION_PROMPT,
+                        prompt=gap_prompt,
+                        max_tokens=4096
+                    )
+                    gap_list = parse_json_response(raw_gaps)
                     
                     for gap_dict in gap_list:
-                        # Safely parse severity — default to MEDIUM if model returns unexpected value
-                        try:
-                            severity = GapSeverity(str(gap_dict.get("severity", "medium")).lower())
-                        except (ValueError, KeyError):
-                            severity = GapSeverity.MEDIUM
+                        if not isinstance(gap_dict, dict):
+                            continue
+                        
+                        gap_title = str(gap_dict.get("title", ""))[:500]
+                        if not gap_title:
+                            continue
                         
                         new_gap = ComplianceGap(
                             scraped_content_id=content.id,
-                            title=gap_dict.get("title", "Untitled Gap")[:500],
-                            description=gap_dict.get("description", ""),
-                            severity=severity,
+                            regulation_id=reg.id,
+                            title=gap_title,
+                            description=str(gap_dict.get("description", "")),
+                            severity=safe_severity(gap_dict.get("severity")),
                             status=GapStatus.IDENTIFIED,
                             affected_modules=gap_dict.get("affected_modules", []),
-                            is_new_requirement=gap_dict.get("is_new_requirement", False)
+                            affected_layer=safe_affected_layer(gap_dict.get("affected_layer")),
+                            is_new_requirement=bool(gap_dict.get("is_new_requirement", False)),
                         )
                         session.add(new_gap)
+                        total_gaps += 1
                     
-                    if gap_list:
-                        await logger.info(f"Chunk {i+1}: saved {len(gap_list)} gaps to DB")
-                except json.JSONDecodeError as e:
-                    await logger.error(f"Failed to parse JSON from chunk {i+1}: {e}. Raw: {raw[:300]}...")
+                if total_gaps > 0:
+                    await logger.info(f"Chunk {i+1}: {len(chunk_regulations)} regs → {total_gaps} gaps saved")
                 
                 # Update progress and commit after each chunk
                 content.chunks_processed = i + 1
@@ -254,14 +395,13 @@ async def process_scraped_content(content_id: UUID) -> bool:
             if content.chunks_processed >= total:
                 content.is_processed = True
                 await session.commit()
-                await logger.info(f"AI analysis completed for ScrapedContent {content_id} — all {total} chunks processed")
+                await logger.info(f"Analysis complete for ScrapedContent {content_id} — all {total} chunks done")
             else:
-                await logger.info(f"Batch complete: processed chunks {start_chunk + 1}-{end_chunk}/{total}. Trigger analysis again to continue.")
+                await logger.info(f"Batch done: chunks {start_chunk + 1}-{end_chunk}/{total}. Trigger again to continue.")
             return True
             
         except Exception as e:
             await logger.error(f"AI analysis failed for ScrapedContent {content_id}: {e}", exc_info=True)
-            # Progress is already saved — next retry will resume from last chunk
             return False
 
 
@@ -270,7 +410,6 @@ async def run_analysis(event: Dict[str, Any]) -> Dict[str, Any]:
     for record in event.get("Records", []):
         try:
             body = json.loads(record.get("body", "{}"))
-            # Note: Previously it looked for 'regulation_id'. The new Scraper Lambda emits 'scraped_content_id'.
             content_id_str = body.get("scraped_content_id")
             
             if content_id_str:

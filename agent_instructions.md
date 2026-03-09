@@ -17,3 +17,8 @@
 
 ## 4. Environment Dependencies
 - **Rule**: Do not assume existence of the GitHub CLI (`gh`). If you need to check workflow status, use `curl` with the GitHub API as a fallback. If a system tool is missing, document the workaround here to fix it "once for all".
+
+## 5. Master Plan
+- **Rule**: The master plan artifact (`master_plan.md` in the brain directory) MUST always be kept up to date. Whenever phases change, priorities shift, or architectural decisions are made, update the master plan immediately.
+- **Rule**: Reference the master plan at the start of new conversations to maintain continuity across sessions.
+- **Location**: `<appDataDir>/brain/<conversation-id>/master_plan.md`

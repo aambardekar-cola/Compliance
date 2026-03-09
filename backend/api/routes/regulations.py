@@ -101,6 +101,8 @@ def _serialize_regulation(reg: Regulation, detailed: bool = False) -> dict:
         "document_type": reg.document_type,
         "agencies": reg.agencies or [],
         "affected_areas": reg.affected_areas or [],
+        "cfr_references": reg.cfr_references or [],
+        "gap_count": len(reg.compliance_gaps) if reg.compliance_gaps else 0,
         "ingested_at": reg.ingested_at.isoformat() if reg.ingested_at else None,
     }
 
@@ -109,7 +111,6 @@ def _serialize_regulation(reg: Regulation, detailed: bool = False) -> dict:
             "raw_content": reg.raw_content,
             "ai_analysis": reg.ai_analysis or {},
             "key_requirements": reg.key_requirements or [],
-            "cfr_references": reg.cfr_references or [],
         })
 
     return data

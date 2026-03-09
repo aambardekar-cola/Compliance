@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from shared.db import get_session_dependency
-from shared.models import ComplianceGap, GapSeverity, GapStatus
+from shared.models import ComplianceGap, Regulation, GapSeverity, GapStatus, AffectedLayer
 
 router = APIRouter()
 
@@ -19,11 +19,16 @@ async def list_gaps(
     severity: Optional[str] = Query(None, description="Filter by severity"),
     status: Optional[str] = Query(None, description="Filter by status"),
     module: Optional[str] = Query(None, description="Filter by affected PCO module"),
+    regulation_id: Optional[str] = Query(None, description="Filter by parent regulation"),
+    affected_layer: Optional[str] = Query(None, description="Filter by affected layer (frontend/backend/both)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
     """List compliance gaps with filtering and pagination."""
-    query = select(ComplianceGap).options(joinedload(ComplianceGap.scraped_content))
+    query = select(ComplianceGap).options(
+        joinedload(ComplianceGap.scraped_content),
+        joinedload(ComplianceGap.regulation),
+    )
 
     if severity:
         try:
@@ -40,8 +45,19 @@ async def list_gaps(
             except ValueError:
                 raise HTTPException(400, f"Invalid status: {status}")
 
-    # Note: affected_modules is a JSON array. In Postgres we'd use array ops, but this works for basic filtering
-    # if it becomes a problem, we can use raw SQL cast to JSONB
+    # Note: affected_modules is a JSON array.
+    
+    if regulation_id:
+        try:
+            query = query.where(ComplianceGap.regulation_id == UUID(regulation_id))
+        except ValueError:
+            raise HTTPException(400, f"Invalid regulation_id: {regulation_id}")
+    
+    if affected_layer:
+        try:
+            query = query.where(ComplianceGap.affected_layer == AffectedLayer(affected_layer.lower()))
+        except ValueError:
+            raise HTTPException(400, f"Invalid affected_layer: {affected_layer}")
     
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -125,14 +141,25 @@ def _serialize_gap(gap: ComplianceGap, detailed: bool = False) -> dict:
     data = {
         "id": str(gap.id),
         "source_content_id": str(gap.scraped_content_id),
+        "regulation_id": str(gap.regulation_id) if gap.regulation_id else None,
         "title": gap.title,
         "description": gap.description,
         "severity": gap.severity.value if gap.severity else None,
         "status": gap.status.value if gap.status else None,
         "affected_modules": gap.affected_modules or [],
+        "affected_layer": gap.affected_layer.value if gap.affected_layer else "unknown",
         "is_new_requirement": gap.is_new_requirement,
         "deadline": gap.deadline.isoformat() if gap.deadline else None,
         "created_at": gap.created_at.isoformat() if gap.created_at else None,
     }
+
+    # Include parent regulation info if loaded
+    if gap.regulation:
+        data["regulation"] = {
+            "id": str(gap.regulation.id),
+            "title": gap.regulation.title,
+            "cfr_references": gap.regulation.cfr_references or [],
+            "affected_areas": gap.regulation.affected_areas or [],
+        }
 
     return data
