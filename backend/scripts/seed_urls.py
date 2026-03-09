@@ -46,6 +46,12 @@ SEED_URLS = [
 ]
 
 async def seed_data():
+    # Reset cached engine/session to avoid event loop conflicts
+    # (the Lambda handler creates these on a different loop)
+    import shared.db as db_module
+    db_module._engine = None
+    db_module._session_factory = None
+
     # Ensure all tables are created (idempotent)
     await init_db()
     
