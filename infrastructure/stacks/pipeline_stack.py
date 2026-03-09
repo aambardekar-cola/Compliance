@@ -131,7 +131,10 @@ class PipelineStack(cdk.Stack):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["bedrock:InvokeModel"],
-                resources=["arn:aws:bedrock:*::foundation-model/*"],
+                resources=[
+                    "arn:aws:bedrock:*::foundation-model/*",
+                    "arn:aws:bedrock:*:*:inference-profile/*",
+                ],
             )
         )
 
@@ -179,7 +182,10 @@ class PipelineStack(cdk.Stack):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["bedrock:InvokeModel"],
-                resources=["arn:aws:bedrock:*::foundation-model/*"],
+                resources=[
+                    "arn:aws:bedrock:*::foundation-model/*",
+                    "arn:aws:bedrock:*:*:inference-profile/*",
+                ],
             )
         )
 
