@@ -231,12 +231,9 @@ async def process_scraped_content(content_id: UUID) -> bool:
                             severity = GapSeverity.MEDIUM
                         
                         new_gap = ComplianceGap(
-                            url_id=content.url_id,
                             scraped_content_id=content.id,
                             title=gap_dict.get("title", "Untitled Gap")[:500],
                             description=gap_dict.get("description", ""),
-                            requirement=gap_dict.get("requirement", ""),
-                            citation=gap_dict.get("citation", ""),
                             severity=severity,
                             status=GapStatus.IDENTIFIED,
                             affected_modules=gap_dict.get("affected_modules", []),
