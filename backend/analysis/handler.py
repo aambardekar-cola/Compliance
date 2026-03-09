@@ -19,10 +19,10 @@ logger = get_pipeline_logger("analysis")
 # Hybrid Bedrock Architecture: Haiku for filtering, Sonnet for deep extraction
 # Model IDs are configurable via Lambda environment variables
 HAIKU_MODEL_ID = os.environ.get(
-    "BEDROCK_HAIKU_MODEL_ID", "us.anthropic.claude-haiku-4-5-20250609-v1:0"
+    "BEDROCK_HAIKU_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
 SONNET_MODEL_ID = os.environ.get(
-    "BEDROCK_SONNET_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250514-v1:0"
+    "BEDROCK_SONNET_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 )
 boto_client = boto3.client("bedrock-runtime")
 
