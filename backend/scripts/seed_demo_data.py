@@ -2,8 +2,8 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 
-from backend.shared.db import get_engine, Base
-from backend.shared.models import (
+from shared.db import get_engine, Base
+from shared.models import (
     Tenant,
     Regulation,
     RegulationSection,
