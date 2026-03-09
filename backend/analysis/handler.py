@@ -73,7 +73,7 @@ async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: in
 
 async def filter_relevant_content(text: str) -> bool:
     """Pass 1: Haiku Filter - determines if content is relevant."""
-    logger.info("Executing Pass 1 (Haiku Filtering)...")
+    await logger.info("Executing Pass 1 (Haiku Filtering)...")
     filter_prompt = f"Does the following regulatory text contain any actionable compliance requirements, changes, or mandates that would affect a PACE organization? Respond with ONLY the word YES or NO. Do not explain.\n\n<TEXT>\n{text}\n</TEXT>"
     filter_system = "You are a fast legal filter. You only respond with YES or NO."
     
@@ -84,7 +84,7 @@ async def filter_relevant_content(text: str) -> bool:
 
 async def extract_compliance_gaps(text: str) -> List[Dict]:
     """Pass 2: Sonnet Extraction - extracts compliance gaps."""
-    logger.info("Executing Pass 2 (Sonnet Deep Extraction)...")
+    await logger.info("Executing Pass 2 (Sonnet Deep Extraction)...")
     extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{text}\n</TEXT>"
     
     content = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=4096)
@@ -103,13 +103,13 @@ async def extract_compliance_gaps(text: str) -> List[Dict]:
             return gaps["gaps"]
         return []
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON from Sonnet output: {e}. Raw content: {content[:500]}...")
+        await logger.error(f"Failed to parse JSON from Sonnet output: {e}. Raw content: {content[:500]}...")
         return []
 
 
 async def process_scraped_content(content_id: UUID) -> bool:
     """Run the two-pass AI analysis on a piece of scraped content."""
-    logger.info(f"Starting AI analysis for ScrapedContent {content_id}")
+    await logger.info(f"Starting AI analysis for ScrapedContent {content_id}")
     
     async with get_db_session() as session:
         # 1. Fetch the content
@@ -119,32 +119,32 @@ async def process_scraped_content(content_id: UUID) -> bool:
         content = result.scalar_one_or_none()
         
         if not content:
-            logger.error(f"ScrapedContent {content_id} not found")
+            await logger.error(f"ScrapedContent {content_id} not found")
             return False
             
         if content.is_processed:
-            logger.warning(f"ScrapedContent {content_id} already processed")
+            await logger.warning(f"ScrapedContent {content_id} already processed")
             return True
 
         try:
             # Pass 1: Filtering (Haiku)
-            logger.info(f"Pass 1: Filtering content with Claude 3 Haiku", extra={"length": len(content.content_text)})
+            await logger.info(f"Pass 1: Filtering content with Claude 3 Haiku", {"length": len(content.content_text)})
             is_relevant = await filter_relevant_content(content.content_text)
             
             if not is_relevant:
-                logger.info(f"Content identified as irrelevant, skipping Pass 2")
+                await logger.info(f"Content identified as irrelevant, skipping Pass 2")
                 content.is_processed = True
                 await session.commit()
                 return True
 
             # Pass 2: Extraction (Sonnet)
-            logger.info(f"Pass 2: Extracting gaps with Claude 3.5 Sonnet")
+            await logger.info(f"Pass 2: Extracting gaps with Claude 3.5 Sonnet")
             gaps_data = await extract_compliance_gaps(content.content_text)
             
             if not gaps_data:
-                logger.info(f"No compliance gaps identified in content")
+                await logger.info(f"No compliance gaps identified in content")
             else:
-                logger.info(f"Identified {len(gaps_data)} potential gaps")
+                await logger.info(f"Identified {len(gaps_data)} potential gaps")
                 for gap_dict in gaps_data:
                     new_gap = ComplianceGap(
                         url_id=content.url_id,
@@ -162,11 +162,11 @@ async def process_scraped_content(content_id: UUID) -> bool:
             
             content.is_processed = True
             await session.commit()
-            logger.info(f"AI analysis completed for ScrapedContent {content_id}")
+            await logger.info(f"AI analysis completed for ScrapedContent {content_id}")
             return True
             
         except Exception as e:
-            logger.error(f"AI analysis failed for ScrapedContent {content_id}: {e}", exc_info=True)
+            await logger.error(f"AI analysis failed for ScrapedContent {content_id}: {e}", exc_info=True)
             return False
 
 
@@ -182,9 +182,9 @@ async def run_analysis(event: Dict[str, Any]) -> Dict[str, Any]:
                 content_id = UUID(content_id_str)
                 await process_scraped_content(content_id)
             else:
-                logger.error("SQS message missing scraped_content_id.")
+                await logger.error("SQS message missing scraped_content_id.")
         except Exception as e:
-            logger.error(f"Error processing SQS record: {e}", exc_info=True)
+            await logger.error(f"Error processing SQS record: {e}", exc_info=True)
             
     return {"statusCode": 200, "body": "Gap analysis complete"}
 

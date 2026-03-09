@@ -110,6 +110,9 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
                 # Hash the text to check for changes
                 content_hash = hashlib.sha256(text_content.encode("utf-8")).hexdigest()
                 
+                # Strip null bytes — PostgreSQL rejects \x00 in text columns
+                text_content = text_content.replace("\x00", "")
+                
                 async with get_db_session() as session:
                     # Check the most recent scrape for this URL
                     recent_scrape = await session.execute(
