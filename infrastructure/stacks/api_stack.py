@@ -113,6 +113,16 @@ class ApiStack(cdk.Stack):
             apigw.LambdaIntegration(self.api_lambda),
         )
 
+        # ---- Force New Deployment ----
+        # API Gateway is caching a ghost OPTIONS method from a previous deployment.
+        # Adding this dummy resource alters the CDK Deployment hash, explicitly forcing
+        # a new AWS::ApiGateway::Deployment to be generated and bound to the live Stage,
+        # which will wipe out the rogue OPTIONS mock integrations.
+        self.api.root.add_resource("force_deploy_1").add_method(
+            "GET",
+            apigw.LambdaIntegration(self.api_lambda)
+        )
+
         self.api_url = self.api.url
 
         # ---- Outputs ----
