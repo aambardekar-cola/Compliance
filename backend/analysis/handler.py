@@ -24,7 +24,11 @@ HAIKU_MODEL_ID = os.environ.get(
 SONNET_MODEL_ID = os.environ.get(
     "BEDROCK_SONNET_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 )
-boto_client = boto3.client("bedrock-runtime")
+from botocore.config import Config as BotoConfig
+boto_client = boto3.client(
+    "bedrock-runtime",
+    config=BotoConfig(read_timeout=300, retries={"max_attempts": 2})
+)
 
 # Max chars to send to Bedrock in a single request (~50K chars ≈ ~15K tokens)
 MAX_CONTENT_CHARS = 50000
