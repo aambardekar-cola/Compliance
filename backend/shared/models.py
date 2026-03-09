@@ -148,14 +148,14 @@ class ComplianceGap(Base):
     __tablename__ = "compliance_gaps"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    scraped_content_id = Column(UUID(as_uuid=True), ForeignKey("scraped_content.id"), nullable=False)
+    scraped_content_id = Column(UUID(as_uuid=True), ForeignKey("scraped_content.id", ondelete="CASCADE"), nullable=False)
     
     # AI Extracted Fields
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=False)
-    status = Column(Enum(GapStatus), default=GapStatus.IDENTIFIED, nullable=False)
-    severity = Column(Enum(GapSeverity), nullable=False)
-    affected_modules = Column(JSON, default=list)  # e.g., ["Care Planning", "IDT"]
+    status = Column(Enum(GapStatus, values_callable=lambda x: [e.value for e in x]), default=GapStatus.IDENTIFIED, nullable=False)
+    severity = Column(Enum(GapSeverity, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    affected_modules = Column(JSON, nullable=True)  # List of PCO app modules affected
     deadline = Column(Date, nullable=True)
     
     is_new_requirement = Column(Boolean, default=False)
@@ -188,12 +188,12 @@ class Regulation(Base):
 
     # AI Analysis
     ai_analysis = Column(JSON, default=dict)  # Structured AI analysis output
-    relevance_score = Column(Float, nullable=True)  # 0.0 - 1.0
+    relevance_score = Column(Float, nullable=True)  # AI-determined relevance matching PCO domains
     affected_areas = Column(JSON, default=list)  # List of affected EHR areas
     key_requirements = Column(JSON, default=list)  # Extracted requirements
 
     # Status & Timeline
-    status = Column(Enum(RegulationStatus), default=RegulationStatus.PROPOSED, nullable=False)
+    status = Column(Enum(RegulationStatus, values_callable=lambda x: [e.value for e in x]), default=RegulationStatus.PROPOSED, nullable=False)
     effective_date = Column(Date, nullable=True)
     comment_deadline = Column(Date, nullable=True)
     published_date = Column(Date, nullable=True)
@@ -226,12 +226,12 @@ class GapAnalysis(Base):
     regulation_id = Column(UUID(as_uuid=True), ForeignKey("regulations.id"), nullable=False)
 
     # Gap details
-    title = Column(String(500), nullable=False)
+    title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
-    severity = Column(Enum(GapSeverity), nullable=False)
-    status = Column(Enum(GapStatus), default=GapStatus.IDENTIFIED, nullable=False)
-
-    # Code references
+    severity = Column(Enum(GapSeverity, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    status = Column(Enum(GapStatus, values_callable=lambda x: [e.value for e in x]), default=GapStatus.IDENTIFIED, nullable=False)
+    
+    # Optional references to where this gap originated
     affected_code = Column(JSON, default=list)  # [{repo, file_path, line_range, description}]
     affected_components = Column(JSON, default=list)  # ["enrollment", "billing", "care_plan"]
 
@@ -267,13 +267,13 @@ class Communication(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True)
 
     # Content
-    type = Column(Enum(CommunicationType), nullable=False)
+    type = Column(Enum(CommunicationType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     subject = Column(String(500), nullable=False)
     content_html = Column(Text, nullable=False)
     content_plain = Column(Text, nullable=True)
 
     # Status
-    status = Column(Enum(CommunicationStatus), default=CommunicationStatus.DRAFT, nullable=False)
+    status = Column(Enum(CommunicationStatus, values_callable=lambda x: [e.value for e in x]), default=CommunicationStatus.DRAFT, nullable=False)
     approved_by = Column(String(255), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     sent_at = Column(DateTime, nullable=True)
