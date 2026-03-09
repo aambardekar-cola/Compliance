@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
+import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func
@@ -209,3 +210,38 @@ async def verify_modules():
             results[mod_name] = traceback.format_exc()
             
     return results
+
+@router.post("/trigger-analysis", dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
+async def trigger_analysis(session: AsyncSession = Depends(get_session_dependency)):
+    """Re-queue all unprocessed ScrapedContent items for Bedrock analysis."""
+    import boto3
+    result = await session.execute(
+        select(ScrapedContent).where(ScrapedContent.is_processed == False)
+    )
+    unprocessed = result.scalars().all()
+    
+    if not unprocessed:
+        return {"status": "no_unprocessed_content", "count": 0}
+    
+    queue_url = os.environ.get("ANALYSIS_QUEUE_URL")
+    if not queue_url:
+        raise HTTPException(status_code=500, detail="ANALYSIS_QUEUE_URL not configured")
+    
+    import json
+    sqs = boto3.client("sqs")
+    queued = 0
+    for content in unprocessed:
+        try:
+            sqs.send_message(
+                QueueUrl=queue_url,
+                MessageBody=json.dumps({
+                    "scraped_content_id": str(content.id),
+                    "url_name": f"re-analysis-{content.url_id}"
+                })
+            )
+            queued += 1
+        except Exception as e:
+            await logger.error(f"Failed to queue content {content.id}: {e}")
+    
+    await logger.info(f"Manually triggered analysis for {queued} unprocessed items")
+    return {"status": "triggered", "queued": queued, "total_unprocessed": len(unprocessed)}
