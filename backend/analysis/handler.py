@@ -17,8 +17,9 @@ from shared.logging import get_pipeline_logger
 logger = get_pipeline_logger("analysis")
 
 # Hybrid Bedrock Architecture: Haiku for filtering, Sonnet for deep extraction
-HAIKU_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
-SONNET_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+# Use cross-region inference profiles (required for on-demand invocation)
+HAIKU_MODEL_ID = "us.anthropic.claude-3-haiku-20240307-v1:0"
+SONNET_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 boto_client = boto3.client("bedrock-runtime")
 
 SYSTEM_PROMPT = """
