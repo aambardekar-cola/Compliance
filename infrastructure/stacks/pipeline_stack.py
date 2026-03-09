@@ -92,6 +92,9 @@ class PipelineStack(cdk.Stack):
             "COMMUNICATION_QUEUE_URL": self.communication_queue.queue_url,
             "APP_ENV": deploy_env,
             "LOG_LEVEL": "INFO",
+            # Bedrock model IDs — update these when new models are released
+            "BEDROCK_HAIKU_MODEL_ID": "us.anthropic.claude-haiku-4-5-20250609-v1:0",
+            "BEDROCK_SONNET_MODEL_ID": "us.anthropic.claude-sonnet-4-5-20250514-v1:0",
         }
 
         # ---- Ingestion Lambda ----
