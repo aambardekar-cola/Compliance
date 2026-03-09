@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mangum import Mangum
+import traceback
 
 from shared.config import get_settings
 from shared.db import init_db, close_db
@@ -23,6 +24,18 @@ app = FastAPI(
     docs_url="/api/docs" if not get_settings().is_production else None,
     redoc_url="/api/redoc" if not get_settings().is_production else None,
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    import traceback
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error", 
+            "error": str(exc), 
+            "trace": traceback.format_exc()
+        }
+    )
 
 # ---- Auth Middleware ----
 app.add_middleware(AuthMiddleware)
