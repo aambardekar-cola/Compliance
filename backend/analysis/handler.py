@@ -129,7 +129,7 @@ async def extract_compliance_gaps(text: str) -> List[Dict]:
         await logger.info(f"Analyzing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
         extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{chunk}\n</TEXT>"
         
-        content = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=4096)
+        content = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=8192)
         
         # Strip potential markdown formatting from LLM output
         if "```json" in content:
