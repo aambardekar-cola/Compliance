@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from shared.db import get_session_dependency
 from shared.models import Regulation, RegulationStatus
@@ -24,7 +25,11 @@ async def list_regulations(
     page_size: int = Query(20, ge=1, le=100),
 ):
     """List regulations with filtering, search, and pagination."""
-    query = select(Regulation).where(Regulation.relevance_score >= min_relevance)
+    query = (
+        select(Regulation)
+        .options(selectinload(Regulation.compliance_gaps))
+        .where(Regulation.relevance_score >= min_relevance)
+    )
 
     # Apply filters
     if status:
@@ -75,7 +80,9 @@ async def get_regulation(
 ):
     """Get detailed regulation information with AI analysis."""
     result = await db.execute(
-        select(Regulation).where(Regulation.id == regulation_id)
+        select(Regulation)
+        .options(selectinload(Regulation.compliance_gaps))
+        .where(Regulation.id == regulation_id)
     )
     regulation = result.scalar_one_or_none()
 

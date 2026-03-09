@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
-from shared.models import ComplianceRuleUrl, ScrapedContent, ComplianceGap, PipelineLog, UserRole
+from shared.models import ComplianceRuleUrl, ScrapedContent, ComplianceGap, Regulation, PipelineLog, UserRole
 from api.middleware.auth import require_role
 import importlib
 import traceback
@@ -111,10 +111,12 @@ async def get_diagnostics(session: AsyncSession = Depends(get_session_dependency
     scraped_count_result = await session.execute(select(func.count()).select_from(ScrapedContent))
     gap_count_result = await session.execute(select(func.count()).select_from(ComplianceGap))
     log_count_result = await session.execute(select(func.count()).select_from(PipelineLog))
+    reg_count_result = await session.execute(select(func.count()).select_from(Regulation))
     
     scraped_count = scraped_count_result.scalar()
     gap_count = gap_count_result.scalar()
     log_count = log_count_result.scalar()
+    reg_count = reg_count_result.scalar()
     
     latest_scrapes = await session.execute(
         select(ScrapedContent).order_by(ScrapedContent.scraped_at.desc()).limit(5)
@@ -127,6 +129,7 @@ async def get_diagnostics(session: AsyncSession = Depends(get_session_dependency
     return {
         "counts": {
             "scraped_content": scraped_count,
+            "regulations": reg_count,
             "compliance_gaps": gap_count,
             "pipeline_logs": log_count
         },
