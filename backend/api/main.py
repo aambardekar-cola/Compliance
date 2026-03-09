@@ -11,6 +11,17 @@ from shared.db import init_db, close_db
 from api.middleware.auth import AuthMiddleware
 from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin
 
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class DebugMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as e:
+            import traceback
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=500, content={"detail": "CRASH", "trace": traceback.format_exc()})
+
 # ---- Logging ----
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +36,7 @@ app = FastAPI(
 )
 
 # ---- Auth Middleware ----
+app.add_middleware(DebugMiddleware)
 app.add_middleware(AuthMiddleware)
 
 # ---- CORS ----
