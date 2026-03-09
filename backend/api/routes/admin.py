@@ -2,7 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
@@ -86,3 +86,34 @@ async def delete_url(url_id: UUID, session: AsyncSession = Depends(get_session_d
     await session.delete(url_obj)
     await session.commit()
     return None
+
+@router.get("/diagnostics", dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
+async def get_diagnostics(session: AsyncSession = Depends(get_session_dependency)):
+    """Internal diagnostic endpoint to check pipeline state."""
+    from shared.models import ScrapedContent, ComplianceGap
+    
+    scraped_count = await session.execute(select(func.count(ScrapedContent.id)))
+    gap_count = await session.execute(select(func.count(ComplianceGap.id)))
+    
+    latest_scrapes = await session.execute(
+        select(ScrapedContent).order_by(ScrapedContent.scraped_at.desc()).limit(5)
+    )
+    
+    latest_gaps = await session.execute(
+        select(ComplianceGap).order_by(ComplianceGap.created_at.desc()).limit(5)
+    )
+    
+    return {
+        "counts": {
+            "scraped_content": scraped_count.scalar(),
+            "compliance_gaps": gap_count.scalar()
+        },
+        "latest_scrapes": [
+            {"id": str(s.id), "url_id": str(s.url_id), "scraped_at": s.scraped_at.isoformat(), "is_processed": s.is_processed}
+            for s in latest_scrapes.scalars().all()
+        ],
+        "latest_gaps": [
+            {"id": str(g.id), "title": g.title, "severity": g.severity.value, "created_at": g.created_at.isoformat()}
+            for g in latest_gaps.scalars().all()
+        ]
+    }

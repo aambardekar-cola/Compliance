@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
 from shared.models import (
-    Regulation, GapAnalysis, Communication,
+    Regulation, ComplianceGap, Communication,
     RegulationStatus, GapSeverity, GapStatus, CommunicationStatus,
 )
 from api.middleware.auth import get_current_user
@@ -37,14 +37,14 @@ async def get_dashboard(
     reg_result = await db.execute(reg_query)
     reg_stats = reg_result.one()
 
-    # ---- Gap Analysis Stats ----
+    # ---- Gap Analysis Stats (from AI extracted ComplianceGap) ----
     gap_query = select(
-        func.count(GapAnalysis.id).label("total"),
-        func.count(case((GapAnalysis.severity == GapSeverity.CRITICAL, 1))).label("critical"),
-        func.count(case((GapAnalysis.severity == GapSeverity.HIGH, 1))).label("high"),
-        func.count(case((GapAnalysis.status == GapStatus.IDENTIFIED, 1))).label("open"),
-        func.count(case((GapAnalysis.status == GapStatus.RESOLVED, 1))).label("resolved"),
-        func.sum(GapAnalysis.effort_hours).label("total_effort_hours"),
+        func.count(ComplianceGap.id).label("total"),
+        func.count(case((ComplianceGap.severity == GapSeverity.CRITICAL, 1))).label("critical"),
+        func.count(case((ComplianceGap.severity == GapSeverity.HIGH, 1))).label("high"),
+        func.count(case((ComplianceGap.status == GapStatus.IDENTIFIED, 1))).label("open"),
+        func.count(case((ComplianceGap.status == GapStatus.RESOLVED, 1))).label("resolved"),
+        func.cast(0, func.Integer).label("total_effort_hours"), # ComplianceGap doesn't track effort yet
     )
 
     gap_result = await db.execute(gap_query)
