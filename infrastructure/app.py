@@ -108,4 +108,8 @@ frontend_stack = FrontendStack(
 )
 frontend_stack.add_dependency(api_stack)
 
+# ---- Global Tags ----
+cdk.Tags.of(app).add("product", "pco-compliance")
+cdk.Tags.of(app).add("environment", deploy_env)
+
 app.synth()
