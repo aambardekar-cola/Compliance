@@ -95,6 +95,7 @@ class PipelineStack(cdk.Stack):
             # Bedrock model IDs — update these when new models are released
             "BEDROCK_HAIKU_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
             "BEDROCK_SONNET_MODEL_ID": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "MAX_CHUNKS_PER_RUN": "5",  # Process 5 chunks per invocation; trigger again to continue
         }
 
         # ---- Ingestion Lambda ----

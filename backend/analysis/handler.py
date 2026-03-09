@@ -28,6 +28,8 @@ boto_client = boto3.client("bedrock-runtime")
 
 # Max chars to send to Bedrock in a single request (~50K chars ≈ ~15K tokens)
 MAX_CONTENT_CHARS = 50000
+# Max chunks to process per Lambda invocation (prevents timeout; resumes on next trigger)
+MAX_CHUNKS_PER_RUN = int(os.environ.get("MAX_CHUNKS_PER_RUN", "10"))
 
 SYSTEM_PROMPT = """
 You are an expert PACE (Programs of All-Inclusive Care for the Elderly) compliance officer.
@@ -150,7 +152,11 @@ async def extract_compliance_gaps(text: str) -> List[Dict]:
 
 
 async def process_scraped_content(content_id: UUID) -> bool:
-    """Run the two-pass AI analysis on a piece of scraped content."""
+    """Run the two-pass AI analysis on a piece of scraped content.
+    
+    Supports incremental processing: gaps are saved per-chunk and progress
+    is tracked so processing resumes from where it left off on retry.
+    """
     await logger.info(f"Starting AI analysis for ScrapedContent {content_id}")
     
     async with get_db_session() as session:
@@ -169,46 +175,86 @@ async def process_scraped_content(content_id: UUID) -> bool:
             return True
 
         try:
-            # Pass 1: Filtering (Haiku)
-            await logger.info(f"Pass 1: Filtering content with Claude 3 Haiku", {"length": len(content.content_text)})
-            is_relevant = await filter_relevant_content(content.content_text)
+            # Pass 1: Filtering (Haiku) — skip if we already have progress (means filtering passed)
+            if not content.chunks_processed or content.chunks_processed == 0:
+                await logger.info(f"Pass 1: Filtering content with Claude 3 Haiku", {"length": len(content.content_text)})
+                is_relevant = await filter_relevant_content(content.content_text)
+                
+                if not is_relevant:
+                    await logger.info(f"Content identified as irrelevant, skipping Pass 2")
+                    content.is_processed = True
+                    await session.commit()
+                    return True
+            else:
+                await logger.info(f"Resuming Pass 2 from chunk {content.chunks_processed + 1}")
+
+            # Pass 2: Chunked Extraction (Sonnet) — with per-chunk persistence
+            await logger.info(f"Pass 2: Extracting gaps with Claude 3.5 Sonnet")
+            chunks = chunk_text(content.content_text)
+            total = len(chunks)
+            start_chunk = content.chunks_processed or 0
             
-            if not is_relevant:
-                await logger.info(f"Content identified as irrelevant, skipping Pass 2")
+            # Save total chunks count
+            content.total_chunks = total
+            await session.commit()
+            
+            end_chunk = min(start_chunk + MAX_CHUNKS_PER_RUN, total)
+            await logger.info(f"Processing chunks {start_chunk + 1}-{end_chunk}/{total} through Sonnet (max {MAX_CHUNKS_PER_RUN}/run)")
+            
+            for i in range(start_chunk, end_chunk):
+                chunk = chunks[i]
+                await logger.info(f"Analyzing chunk {i+1}/{total} ({len(chunk)} chars)")
+                extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{chunk}\n</TEXT>"
+                
+                raw = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=8192)
+                
+                # Strip markdown formatting
+                if "```json" in raw:
+                    raw = raw.split("```json")[-1].split("```")[0].strip()
+                elif "```" in raw:
+                    raw = raw.split("```")[-1].split("```")[0].strip()
+                
+                # Parse and persist gaps from this chunk immediately
+                try:
+                    gaps = json.loads(raw)
+                    gap_list = gaps if isinstance(gaps, list) else gaps.get("gaps", []) if isinstance(gaps, dict) else []
+                    
+                    for gap_dict in gap_list:
+                        new_gap = ComplianceGap(
+                            url_id=content.url_id,
+                            scraped_content_id=content.id,
+                            title=gap_dict.get("title", "Untitled Gap")[:500],
+                            description=gap_dict.get("description", ""),
+                            requirement=gap_dict.get("requirement", ""),
+                            citation=gap_dict.get("citation", ""),
+                            severity=GapSeverity(gap_dict.get("severity", "MEDIUM").upper()),
+                            status=GapStatus.IDENTIFIED,
+                            affected_modules=gap_dict.get("affected_modules", []),
+                            is_new_requirement=gap_dict.get("is_new_requirement", False)
+                        )
+                        session.add(new_gap)
+                    
+                    if gap_list:
+                        await logger.info(f"Chunk {i+1}: saved {len(gap_list)} gaps to DB")
+                except json.JSONDecodeError as e:
+                    await logger.error(f"Failed to parse JSON from chunk {i+1}: {e}. Raw: {raw[:300]}...")
+                
+                # Update progress and commit after each chunk
+                content.chunks_processed = i + 1
+                await session.commit()
+            
+            # Mark as fully processed only if ALL chunks are done
+            if content.chunks_processed >= total:
                 content.is_processed = True
                 await session.commit()
-                return True
-
-            # Pass 2: Extraction (Sonnet)
-            await logger.info(f"Pass 2: Extracting gaps with Claude 3.5 Sonnet")
-            gaps_data = await extract_compliance_gaps(content.content_text)
-            
-            if not gaps_data:
-                await logger.info(f"No compliance gaps identified in content")
+                await logger.info(f"AI analysis completed for ScrapedContent {content_id} — all {total} chunks processed")
             else:
-                await logger.info(f"Identified {len(gaps_data)} potential gaps")
-                for gap_dict in gaps_data:
-                    new_gap = ComplianceGap(
-                        url_id=content.url_id,
-                        scraped_content_id=content.id,
-                        title=gap_dict.get("title", "Untitled Gap")[:500],
-                        description=gap_dict.get("description", ""),
-                        requirement=gap_dict.get("requirement", ""),
-                        citation=gap_dict.get("citation", ""),
-                        severity=GapSeverity(gap_dict.get("severity", "MEDIUM").upper()),
-                        status=GapStatus.IDENTIFIED,
-                        affected_modules=gap_dict.get("affected_modules", []),
-                        is_new_requirement=gap_dict.get("is_new_requirement", False)
-                    )
-                    session.add(new_gap)
-            
-            content.is_processed = True
-            await session.commit()
-            await logger.info(f"AI analysis completed for ScrapedContent {content_id}")
+                await logger.info(f"Batch complete: processed chunks {start_chunk + 1}-{end_chunk}/{total}. Trigger analysis again to continue.")
             return True
             
         except Exception as e:
             await logger.error(f"AI analysis failed for ScrapedContent {content_id}: {e}", exc_info=True)
+            # Progress is already saved — next retry will resume from last chunk
             return False
 
 

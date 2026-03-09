@@ -128,6 +128,8 @@ class ScrapedContent(Base):
     content_text = Column(Text, nullable=False)  # The extracted main body
     content_hash = Column(String(64), nullable=True)  # SHA-256 for diffing
     is_processed = Column(Boolean, default=False)  # Whether AI pipeline has read this yet
+    chunks_processed = Column(Integer, default=0)  # Track progress for resumable chunked analysis
+    total_chunks = Column(Integer, nullable=True)  # Total chunks for this content
     
     scraped_at = Column(DateTime, server_default=func.now(), nullable=False)
 
