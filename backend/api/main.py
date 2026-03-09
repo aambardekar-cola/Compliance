@@ -24,9 +24,6 @@ app = FastAPI(
     redoc_url="/api/redoc" if not get_settings().is_production else None,
 )
 
-# ---- Auth Middleware ----
-app.add_middleware(AuthMiddleware)
-
 # ---- CORS ----
 settings = get_settings()
 app.add_middleware(
@@ -34,13 +31,19 @@ app.add_middleware(
     allow_origins=[
         settings.frontend_url,
         "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
     ],
+    allow_origin_regex=r"https://.*\.cloudfront\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---- Auth Middleware ----
+app.add_middleware(AuthMiddleware)
 
 # ---- Routes ----
 app.include_router(dashboard.router, tags=["Dashboard"])

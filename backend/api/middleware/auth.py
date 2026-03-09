@@ -37,6 +37,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = auth_header[7:]  # Remove 'Bearer '
 
         # --- Demo Mode / Mock Token Support ---
+        # NEVER allow mock tokens in production!
+        settings = get_settings()
+        is_prod = settings.app_env in ("prod", "production")
+        
         mock_users = {
             "mock-admin-token": CurrentUser(
                 user_id="mock-admin-123", email="admin@collabrios.com", name="Sarah Mitchell",
@@ -56,7 +60,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             ),
         }
 
-        if token in mock_users:
+        if not is_prod and token in mock_users:
             request.state.user = mock_users[token]
             return await call_next(request)
         
