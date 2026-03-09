@@ -52,7 +52,7 @@ async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
                 api_url = f"https://www.ecfr.gov/api/versioner/v1/full/{issue_date}/title-{title}.xml?part={part}"
                 r = await client.get(api_url, headers={"User-Agent": "PaceCareOnline/1.0"})
                 r.raise_for_status()
-                soup = BeautifulSoup(r.text, "xml")
+                soup = BeautifulSoup(r.text, "html.parser")
                 return soup.get_text(separator="\n", strip=True)
 
         # Fallback HTML scraping (e.g. CMS)

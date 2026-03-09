@@ -55,7 +55,15 @@ class ApiStack(cdk.Stack):
         self.api_lambda = lambda_.Function(
             self,
             "ApiHandler",
-            code=lambda_.Code.from_asset("../backend"),
+            code=lambda_.Code.from_asset(
+                "../backend",
+                exclude=[
+                    "venv", "venv/**", "layer", "layer/**",
+                    "__pycache__", "**/__pycache__/**",
+                    "*.pyc", "tests", "tests/**",
+                    "local_test.db", "failed_logs.txt",
+                ],
+            ),
             handler="api.main.handler",
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=lambda_.Architecture.ARM_64,

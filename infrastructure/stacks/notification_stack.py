@@ -50,7 +50,15 @@ class NotificationStack(cdk.Stack):
         self.comm_lambda = lambda_.Function(
             self,
             "CommunicationHandler",
-            code=lambda_.Code.from_asset("../backend"),
+            code=lambda_.Code.from_asset(
+                "../backend",
+                exclude=[
+                    "venv", "venv/**", "layer", "layer/**",
+                    "__pycache__", "**/__pycache__/**",
+                    "*.pyc", "tests", "tests/**",
+                    "local_test.db", "failed_logs.txt",
+                ],
+            ),
             handler="communications.handler.handler",
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=lambda_.Architecture.ARM_64,
@@ -100,7 +108,15 @@ class NotificationStack(cdk.Stack):
         self.reporting_lambda = lambda_.Function(
             self,
             "ReportingHandler",
-            code=lambda_.Code.from_asset("../backend"),
+            code=lambda_.Code.from_asset(
+                "../backend",
+                exclude=[
+                    "venv", "venv/**", "layer", "layer/**",
+                    "__pycache__", "**/__pycache__/**",
+                    "*.pyc", "tests", "tests/**",
+                    "local_test.db", "failed_logs.txt",
+                ],
+            ),
             handler="reporting.handler.handler",
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=lambda_.Architecture.ARM_64,
