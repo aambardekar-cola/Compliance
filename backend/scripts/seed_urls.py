@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import select
 from shared.config import get_settings
 from shared.models import ComplianceRuleUrl
-from shared.db import get_db_session
+from shared.db import get_db_session, init_db
 
 settings = get_settings()
 
@@ -46,6 +46,9 @@ SEED_URLS = [
 ]
 
 async def seed_data():
+    # Ensure all tables are created (idempotent)
+    await init_db()
+    
     async with get_db_session() as session:
         print("Starting seed of ComplianceRuleUrl...")
         for item in SEED_URLS:
