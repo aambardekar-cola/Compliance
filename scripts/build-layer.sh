@@ -25,8 +25,7 @@ pip3 install \
     typing_extensions annotated-types \
     anyio sniffio idna certifi \
     starlette Mako MarkupSafe \
-    beautifulsoup4 lxml \
-    2>&1 | tail -5
+    beautifulsoup4 lxml
 
 # Also install packages that may not have pre-built wheels
 pip3 install \
@@ -36,8 +35,7 @@ pip3 install \
     --python-version 3.12 \
     --only-binary=:none: \
     --no-deps \
-    structlog greenlet \
-    2>/dev/null || pip3 install --target "$LAYER_DIR" --no-deps structlog greenlet
+    structlog greenlet || pip3 install --target "$LAYER_DIR" --no-deps structlog greenlet
 
 echo "→ Trimming package size..."
 find "$LAYER_DIR" -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
