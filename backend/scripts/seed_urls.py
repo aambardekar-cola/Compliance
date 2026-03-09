@@ -16,17 +16,32 @@ SEED_URLS = [
     {
         "name": "eCFR Title 42, Part 460 (PACE Regulations)",
         "url": "https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-E/part-460",
-        "description": "The definitive, living codified version of all Federal PACE regulations.",
+        "description": "The definitive, living codified version of all Federal PACE regulations covering organization, services, and participant rights.",
     },
     {
         "name": "Federal Register: CY 2024 MA and PACE Final Rule",
         "url": "https://www.federalregister.gov/documents/2024/04/23/2024-07105/medicare-and-medicaid-programs-medicare-advantage-medicare-prescription-drug-benefit-program",
-        "description": "Contains the latest finalized changes for MA and PACE, including immunization and grievance updates.",
+        "description": "Latest finalized regulatory changes for Medicare Advantage and PACE, including immunization and grievance updates.",
     },
     {
-        "name": "CMS/Medicaid Official PACE Program Overview",
+        "name": "CMS PACE Program Manual (All Chapters)",
+        "url": "https://www.cms.gov/regulations-and-guidance/guidance/manuals/internet-only-manuals-ioms-items/cms019036",
+        "description": "Official CMS guidance manual providing sub-regulatory details on operationalizing PACE requirements.",
+    },
+    {
+        "name": "HHS/OCR: HIPAA Security Rule Requirements",
+        "url": "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html",
+        "description": "Federal standards for protecting electronic protected health information (ePHI).",
+    },
+    {
+        "name": "Medicaid.gov: PACE Program Overview & Memos",
         "url": "https://www.medicaid.gov/medicaid/long-term-services-supports/program-all-inclusive-care-elderly/index.html",
-        "description": "Contains critical sub-regulatory guidance, application updates, and CMS memos.",
+        "description": "Central repository for State/Federal Medicaid PACE coordination, eligibility guidance, and official memos.",
+    },
+    {
+        "name": "CMS.gov: PACE Quality Reporting Requirements",
+        "url": "https://www.cms.gov/medicare/quality/pace-quality-reporting",
+        "description": "Official requirements for PACE quality data submission and performance monitoring.",
     }
 ]
 

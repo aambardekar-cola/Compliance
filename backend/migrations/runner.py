@@ -83,16 +83,13 @@ def handler(event, context):
             alembic_cmd.history(alembic_cfg)
             message = "History displayed in logs"
         elif command == "seed":
-            # Seed demo data and real compliance URLs
+            # Seed real compliance URLs only. 
+            # Dashboard data (Regulations/Gaps) will be generated LIVE by the scraper/AI.
             import asyncio
-            from scripts.seed_demo_data import seed_demo_data
             from scripts.seed_urls import seed_data
             
-            # Since the global event loop might not be set up correctly in lambda,
-            # we use asyncio.run to execute the async seeding function.
-            asyncio.run(seed_demo_data())
             asyncio.run(seed_data())
-            message = "Demo data and URLs successfully seeded"
+            message = "Live compliance URLs successfully seeded. Scraper will now pull real regulatory data."
         else:
             return {
                 "statusCode": 400,
