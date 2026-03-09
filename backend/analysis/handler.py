@@ -18,9 +18,12 @@ logger = get_pipeline_logger("analysis")
 
 # Hybrid Bedrock Architecture: Haiku for filtering, Sonnet for deep extraction
 # Use cross-region inference profiles (required for on-demand invocation)
-HAIKU_MODEL_ID = "us.anthropic.claude-3-haiku-20240307-v1:0"
-SONNET_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+HAIKU_MODEL_ID = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+SONNET_MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
 boto_client = boto3.client("bedrock-runtime")
+
+# Max chars to send to Bedrock in a single request (~50K chars ≈ ~15K tokens)
+MAX_CONTENT_CHARS = 50000
 
 SYSTEM_PROMPT = """
 You are an expert PACE (Programs of All-Inclusive Care for the Elderly) compliance officer.
@@ -73,9 +76,14 @@ async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: in
 
 
 async def filter_relevant_content(text: str) -> bool:
-    """Pass 1: Haiku Filter - determines if content is relevant."""
+    """Pass 1: Haiku Filter - determines if content is relevant.
+    
+    Uses a truncated sample for large documents to stay within context limits.
+    """
     await logger.info("Executing Pass 1 (Haiku Filtering)...")
-    filter_prompt = f"Does the following regulatory text contain any actionable compliance requirements, changes, or mandates that would affect a PACE organization? Respond with ONLY the word YES or NO. Do not explain.\n\n<TEXT>\n{text}\n</TEXT>"
+    # Use a sample for very large docs
+    sample = text[:MAX_CONTENT_CHARS] if len(text) > MAX_CONTENT_CHARS else text
+    filter_prompt = f"Does the following regulatory text contain any actionable compliance requirements, changes, or mandates that would affect a PACE organization? Respond with ONLY the word YES or NO. Do not explain.\n\n<TEXT>\n{sample}\n</TEXT>"
     filter_system = "You are a fast legal filter. You only respond with YES or NO."
     
     filter_result = await invoke_bedrock(model_id=HAIKU_MODEL_ID, system=filter_system, prompt=filter_prompt, max_tokens=10)
@@ -83,29 +91,58 @@ async def filter_relevant_content(text: str) -> bool:
     return "YES" in filter_result.upper()
 
 
+def chunk_text(text: str, chunk_size: int = MAX_CONTENT_CHARS) -> List[str]:
+    """Split text into chunks, breaking on paragraph boundaries."""
+    if len(text) <= chunk_size:
+        return [text]
+    chunks = []
+    while text:
+        if len(text) <= chunk_size:
+            chunks.append(text)
+            break
+        # Find a paragraph break near the chunk boundary
+        split_at = text.rfind("\n\n", 0, chunk_size)
+        if split_at == -1:
+            split_at = text.rfind("\n", 0, chunk_size)
+        if split_at == -1:
+            split_at = chunk_size
+        chunks.append(text[:split_at])
+        text = text[split_at:].lstrip()
+    return chunks
+
+
 async def extract_compliance_gaps(text: str) -> List[Dict]:
-    """Pass 2: Sonnet Extraction - extracts compliance gaps."""
+    """Pass 2: Sonnet Extraction - extracts compliance gaps.
+    
+    Chunks large documents and processes each chunk separately.
+    """
     await logger.info("Executing Pass 2 (Sonnet Deep Extraction)...")
-    extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{text}\n</TEXT>"
+    chunks = chunk_text(text)
+    await logger.info(f"Processing {len(chunks)} chunk(s) through Sonnet")
     
-    content = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=4096)
-    
-    # Strip potential markdown formatting from LLM output
-    if "```json" in content:
-        content = content.split("```json")[-1].split("```")[0].strip()
-    elif "```" in content:
-        content = content.split("```")[-1].split("```")[0].strip()
+    all_gaps = []
+    for i, chunk in enumerate(chunks):
+        await logger.info(f"Analyzing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
+        extract_prompt = f"Analyze the following regulatory text and extract compliance gaps according to your system instructions:\n\n<TEXT>\n{chunk}\n</TEXT>"
         
-    try:
-        gaps = json.loads(content)
-        if isinstance(gaps, list):
-            return gaps
-        elif isinstance(gaps, dict) and "gaps" in gaps:
-            return gaps["gaps"]
-        return []
-    except json.JSONDecodeError as e:
-        await logger.error(f"Failed to parse JSON from Sonnet output: {e}. Raw content: {content[:500]}...")
-        return []
+        content = await invoke_bedrock(model_id=SONNET_MODEL_ID, system=SYSTEM_PROMPT, prompt=extract_prompt, max_tokens=4096)
+        
+        # Strip potential markdown formatting from LLM output
+        if "```json" in content:
+            content = content.split("```json")[-1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[-1].split("```")[0].strip()
+            
+        try:
+            gaps = json.loads(content)
+            if isinstance(gaps, list):
+                all_gaps.extend(gaps)
+            elif isinstance(gaps, dict) and "gaps" in gaps:
+                all_gaps.extend(gaps["gaps"])
+        except json.JSONDecodeError as e:
+            await logger.error(f"Failed to parse JSON from chunk {i+1}: {e}. Raw: {content[:300]}...")
+    
+    return all_gaps
 
 
 async def process_scraped_content(content_id: UUID) -> bool:
