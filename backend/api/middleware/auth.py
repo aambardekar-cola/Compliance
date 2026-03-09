@@ -6,6 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from shared.auth import validate_token, CurrentUser
+from shared.config import get_settings
 
 logger = logging.getLogger(__name__)
 

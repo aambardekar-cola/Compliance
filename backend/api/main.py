@@ -24,6 +24,9 @@ app = FastAPI(
     redoc_url="/api/redoc" if not get_settings().is_production else None,
 )
 
+# ---- Auth Middleware ----
+app.add_middleware(AuthMiddleware)
+
 # ---- CORS ----
 settings = get_settings()
 app.add_middleware(
@@ -41,9 +44,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---- Auth Middleware ----
-app.add_middleware(AuthMiddleware)
 
 # ---- Routes ----
 app.include_router(dashboard.router, tags=["Dashboard"])
