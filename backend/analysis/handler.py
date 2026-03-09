@@ -224,6 +224,12 @@ async def process_scraped_content(content_id: UUID) -> bool:
                     gap_list = gaps if isinstance(gaps, list) else gaps.get("gaps", []) if isinstance(gaps, dict) else []
                     
                     for gap_dict in gap_list:
+                        # Safely parse severity — default to MEDIUM if model returns unexpected value
+                        try:
+                            severity = GapSeverity(str(gap_dict.get("severity", "medium")).lower())
+                        except (ValueError, KeyError):
+                            severity = GapSeverity.MEDIUM
+                        
                         new_gap = ComplianceGap(
                             url_id=content.url_id,
                             scraped_content_id=content.id,
@@ -231,7 +237,7 @@ async def process_scraped_content(content_id: UUID) -> bool:
                             description=gap_dict.get("description", ""),
                             requirement=gap_dict.get("requirement", ""),
                             citation=gap_dict.get("citation", ""),
-                            severity=GapSeverity(gap_dict.get("severity", "MEDIUM").upper()),
+                            severity=severity,
                             status=GapStatus.IDENTIFIED,
                             affected_modules=gap_dict.get("affected_modules", []),
                             is_new_requirement=gap_dict.get("is_new_requirement", False)
