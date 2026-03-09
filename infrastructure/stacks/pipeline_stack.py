@@ -27,6 +27,7 @@ class PipelineStack(cdk.Stack):
         db_secret: secretsmanager.ISecret,
         db_proxy: rds.IDatabaseProxy,
         documents_bucket: s3.IBucket,
+        lambda_security_group: ec2.ISecurityGroup,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -105,7 +106,7 @@ class PipelineStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
-            security_groups=[lambda_sg],
+            security_groups=[lambda_sg, lambda_security_group],
             layers=[deps_layer],
             environment=common_env,
         )
@@ -138,7 +139,7 @@ class PipelineStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
-            security_groups=[lambda_sg],
+            security_groups=[lambda_sg, lambda_security_group],
             layers=[deps_layer],
             environment=common_env,
         )
@@ -178,7 +179,7 @@ class PipelineStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
-            security_groups=[lambda_sg],
+            security_groups=[lambda_sg, lambda_security_group],
             layers=[deps_layer],
             environment=common_env,
         )

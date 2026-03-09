@@ -21,6 +21,7 @@ class NotificationStack(cdk.Stack):
         vpc: ec2.IVpc,
         db_secret: secretsmanager.ISecret,
         db_proxy: rds.IDatabaseProxy,
+        lambda_security_group: ec2.ISecurityGroup,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -58,7 +59,7 @@ class NotificationStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
-            security_groups=[lambda_sg],
+            security_groups=[lambda_sg, lambda_security_group],
             layers=[deps_layer],
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
@@ -107,7 +108,7 @@ class NotificationStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
-            security_groups=[lambda_sg],
+            security_groups=[lambda_sg, lambda_security_group],
             layers=[deps_layer],
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,

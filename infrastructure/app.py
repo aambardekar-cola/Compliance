@@ -60,6 +60,7 @@ api_stack = ApiStack(
     db_secret=data_stack.db_secret,
     db_proxy=data_stack.db_proxy,
     documents_bucket=data_stack.documents_bucket,
+    lambda_security_group=data_stack.lambda_security_group,
     deploy_env=deploy_env,
     log_level=log_level,
     descope_project_id=env_config.get("descope_project_id", ""),
@@ -76,6 +77,7 @@ pipeline_stack = PipelineStack(
     db_secret=data_stack.db_secret,
     db_proxy=data_stack.db_proxy,
     documents_bucket=data_stack.documents_bucket,
+    lambda_security_group=data_stack.lambda_security_group,
     description=f"[{deploy_env}] Regulatory ingestion and analysis pipeline",
 )
 pipeline_stack.add_dependency(data_stack)
@@ -88,6 +90,7 @@ notification_stack = NotificationStack(
     vpc=data_stack.vpc,
     db_secret=data_stack.db_secret,
     db_proxy=data_stack.db_proxy,
+    lambda_security_group=data_stack.lambda_security_group,
     description=f"[{deploy_env}] SES email delivery and communication Lambdas",
 )
 notification_stack.add_dependency(data_stack)

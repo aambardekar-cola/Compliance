@@ -24,6 +24,7 @@ class ApiStack(cdk.Stack):
         db_secret: secretsmanager.ISecret,
         db_proxy: rds.IDatabaseProxy,
         documents_bucket: s3.IBucket,
+        lambda_security_group: ec2.ISecurityGroup,
         deploy_env: str = "dev",
         log_level: str = "INFO",
         descope_project_id: str = "",
@@ -64,7 +65,7 @@ class ApiStack(cdk.Stack):
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
-            security_groups=[lambda_sg],
+            security_groups=[lambda_sg, lambda_security_group],
             layers=[deps_layer],
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
