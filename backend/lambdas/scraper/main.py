@@ -79,54 +79,56 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
     
     stats = {"urls_processed": 0, "updates_found": 0, "errors": 0}
     
+    # First, fetch the list of active URLs
     async with get_db_session() as session:
-        # Get active URLs
         result = await session.execute(
             select(ComplianceRuleUrl).where(ComplianceRuleUrl.is_active == True)
         )
         active_urls = result.scalars().all()
+        # Detach URL data so we can use it outside this session
+        url_data = [{"id": u.id, "name": u.name, "url": u.url} for u in active_urls]
+    
+    if not url_data:
+        await logger.warning("No active compliance URLs found to scrape.")
+        return {"statusCode": 200, "body": json.dumps(stats)}
         
-        if not active_urls:
-            await logger.warning("No active compliance URLs found to scrape.")
-            return {"statusCode": 200, "body": json.dumps(stats)}
-            
-        await logger.info(f"Found {len(active_urls)} active URLs to process.")
-        
-        async with httpx.AsyncClient() as client:
-            for rule_url in active_urls:
-                await logger.info(f"Scraping: {rule_url.name}", {"url": rule_url.url, "id": str(rule_url.id)})
-                try:
-                    text_content = await scrape_url(client, rule_url.url)
+    await logger.info(f"Found {len(url_data)} active URLs to process.")
+    
+    async with httpx.AsyncClient() as client:
+        for rule_url in url_data:
+            # Each URL gets its own DB session so one failure doesn't
+            # roll back all successfully scraped content.
+            try:
+                await logger.info(f"Scraping: {rule_url['name']}", {"url": rule_url["url"], "id": str(rule_url["id"])})
+                text_content = await scrape_url(client, rule_url["url"])
+                
+                if not text_content:
+                    await logger.error(f"Failed to scrape {rule_url['name']}: No content returned", {"url": rule_url["url"]})
+                    stats["errors"] += 1
+                    continue
                     
-                    if not text_content:
-                        await logger.error(f"Failed to scrape {rule_url.name}: No content returned", {"url": rule_url.url})
-                        stats["errors"] += 1
-                        continue
-                        
-                    # Hash the text to check for changes
-                    content_hash = hashlib.sha256(text_content.encode("utf-8")).hexdigest()
-                    
+                # Hash the text to check for changes
+                content_hash = hashlib.sha256(text_content.encode("utf-8")).hexdigest()
+                
+                async with get_db_session() as session:
                     # Check the most recent scrape for this URL
                     recent_scrape = await session.execute(
                         select(ScrapedContent)
-                        .where(ScrapedContent.url_id == rule_url.id)
+                        .where(ScrapedContent.url_id == rule_url["id"])
                         .order_by(ScrapedContent.scraped_at.desc())
                         .limit(1)
                     )
                     last_scrape = recent_scrape.scalar_one_or_none()
                     
                     if not last_scrape or last_scrape.content_hash != content_hash:
-                        # Content has changed or is new, insert new record
-                        await logger.info(f"New or updated content detected for '{rule_url.name}'")
+                        await logger.info(f"New or updated content detected for '{rule_url['name']}'")
                         new_content = ScrapedContent(
-                            url_id=rule_url.id,
+                            url_id=rule_url["id"],
                             content_text=text_content,
                             content_hash=content_hash,
                             is_processed=False
                         )
                         session.add(new_content)
-                        
-                        # We must flush to get the new_content ID
                         await session.flush()
                         
                         # Queue for gap analysis
@@ -138,7 +140,7 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
                                     QueueUrl=queue_url,
                                     MessageBody=json.dumps({
                                         "scraped_content_id": str(new_content.id),
-                                        "url_name": rule_url.name
+                                        "url_name": rule_url["name"]
                                     })
                                 )
                                 await logger.info(f"Queued ScrapedContent {new_content.id} for analysis.")
@@ -147,15 +149,16 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
                         
                         stats["updates_found"] += 1
                     else:
-                        await logger.info(f"No changes detected for '{rule_url.name}'")
+                        await logger.info(f"No changes detected for '{rule_url['name']}'")
                     
-                    stats["urls_processed"] += 1
-                except Exception as e:
-                    await logger.error(f"Unexpected error scraping {rule_url.name}: {e}", {"url": rule_url.url}, exc_info=True)
-                    stats["errors"] += 1
+                    # Commit is handled by get_db_session() context manager
+                
+                stats["urls_processed"] += 1
+                await logger.info(f"Successfully processed: {rule_url['name']}")
+            except Exception as e:
+                await logger.error(f"Unexpected error scraping {rule_url['name']}: {e}", {"url": rule_url["url"]}, exc_info=True)
+                stats["errors"] += 1
 
-        await session.commit()
-    
     await logger.info(f"Scraper completed: {stats}")
     return {
         "statusCode": 200,
