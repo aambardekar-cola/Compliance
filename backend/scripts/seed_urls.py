@@ -5,16 +5,12 @@ import sys
 # Add the backend dir to the Python path so we can import models and config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select
 from shared.config import get_settings
 from shared.models import ComplianceRuleUrl
+from shared.db import get_db_session
 
 settings = get_settings()
-
-# Re-use the engine setup from api/main.py
-engine = create_async_engine(settings.DATABASE_URL, echo=True)
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 SEED_URLS = [
     {
@@ -35,7 +31,7 @@ SEED_URLS = [
 ]
 
 async def seed_data():
-    async with AsyncSessionLocal() as session:
+    async with get_db_session() as session:
         print("Starting seed of ComplianceRuleUrl...")
         for item in SEED_URLS:
             stmt = select(ComplianceRuleUrl).where(ComplianceRuleUrl.url == item["url"])
