@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import boto3
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from shared.config import get_settings
@@ -121,6 +122,16 @@ async def init_db():
     engine = await get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Incremental schema migrations — ALTER TABLE won't be run by create_all
+        # on existing tables, so we add new columns explicitly (idempotent).
+        migrations = [
+            "ALTER TABLE scraped_content ADD COLUMN IF NOT EXISTS chunks_processed INTEGER DEFAULT 0",
+            "ALTER TABLE scraped_content ADD COLUMN IF NOT EXISTS total_chunks INTEGER",
+        ]
+        for sql in migrations:
+            await conn.execute(text(sql))
+            
     logger.info("Database schema initialized")
 
 
