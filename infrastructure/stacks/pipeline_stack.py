@@ -192,6 +192,19 @@ class PipelineStack(cdk.Stack):
             )
         )
 
+        # AWS Marketplace permissions for auto-enabling newer Bedrock models
+        # (Haiku 4.5, Sonnet 4.5 are served via Marketplace)
+        self.analysis_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "aws-marketplace:Subscribe",
+                    "aws-marketplace:ViewSubscriptions",
+                ],
+                resources=["*"],
+            )
+        )
+
         # ---- Scraper Lambda ----
         self.scraper_lambda = lambda_.Function(
             self,
