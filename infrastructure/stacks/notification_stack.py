@@ -22,6 +22,7 @@ class NotificationStack(cdk.Stack):
         db_secret: secretsmanager.ISecret,
         db_proxy: rds.IDatabaseProxy,
         lambda_security_group: ec2.ISecurityGroup,
+        deploy_env: str = "dev",
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -64,6 +65,7 @@ class NotificationStack(cdk.Stack):
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
                 "DB_PROXY_ENDPOINT": db_proxy.endpoint,
+                "APP_ENV": deploy_env,
                 "SES_FROM_EMAIL": "compliance@collabrios.com",
                 "LOG_LEVEL": "INFO",
             },
@@ -113,6 +115,7 @@ class NotificationStack(cdk.Stack):
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
                 "DB_PROXY_ENDPOINT": db_proxy.endpoint,
+                "APP_ENV": deploy_env,
                 "SES_FROM_EMAIL": "compliance@collabrios.com",
                 "LOG_LEVEL": "INFO",
             },

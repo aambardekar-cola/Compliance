@@ -28,6 +28,7 @@ class PipelineStack(cdk.Stack):
         db_proxy: rds.IDatabaseProxy,
         documents_bucket: s3.IBucket,
         lambda_security_group: ec2.ISecurityGroup,
+        deploy_env: str = "dev",
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -89,6 +90,7 @@ class PipelineStack(cdk.Stack):
             "DOCUMENTS_BUCKET": documents_bucket.bucket_name,
             "ANALYSIS_QUEUE_URL": self.analysis_queue.queue_url,
             "COMMUNICATION_QUEUE_URL": self.communication_queue.queue_url,
+            "APP_ENV": deploy_env,
             "LOG_LEVEL": "INFO",
         }
 

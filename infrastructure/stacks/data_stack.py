@@ -22,6 +22,7 @@ class DataStack(cdk.Stack):
         aurora_min_capacity: float = 0.5,
         aurora_max_capacity: float = 8,
         nat_gateways: int = 1,
+        deploy_env: str = "dev",
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -191,6 +192,7 @@ class DataStack(cdk.Stack):
             environment={
                 "DB_SECRET_ARN": self.db_secret.secret_arn,
                 "DB_PROXY_ENDPOINT": self.db_proxy.endpoint,
+                "APP_ENV": deploy_env,
             },
         )
 

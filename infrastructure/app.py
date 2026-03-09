@@ -48,6 +48,7 @@ data_stack = DataStack(
     aurora_min_capacity=aurora_min,
     aurora_max_capacity=aurora_max,
     nat_gateways=nat_gateways,
+    deploy_env=deploy_env,
     description=f"[{deploy_env}] Aurora Serverless v2 (PostgreSQL) and S3 buckets",
 )
 
@@ -78,6 +79,7 @@ pipeline_stack = PipelineStack(
     db_proxy=data_stack.db_proxy,
     documents_bucket=data_stack.documents_bucket,
     lambda_security_group=data_stack.lambda_security_group,
+    deploy_env=deploy_env,
     description=f"[{deploy_env}] Regulatory ingestion and analysis pipeline",
 )
 pipeline_stack.add_dependency(data_stack)
@@ -91,6 +93,7 @@ notification_stack = NotificationStack(
     db_secret=data_stack.db_secret,
     db_proxy=data_stack.db_proxy,
     lambda_security_group=data_stack.lambda_security_group,
+    deploy_env=deploy_env,
     description=f"[{deploy_env}] SES email delivery and communication Lambdas",
 )
 notification_stack.add_dependency(data_stack)
