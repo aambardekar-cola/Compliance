@@ -4,12 +4,27 @@ import {
     FileText,
     AlertTriangle,
     Send,
-    Clock,
     TrendingUp,
     Shield,
     Activity,
+    Layers,
 } from 'lucide-react';
 import apiClient from '../api/client';
+
+// Module colors matching other pages
+const MODULE_COLORS = {
+    'IDT': '#6366f1', 'Care Plan': '#8b5cf6', 'Pharmacy': '#ec4899', 'Enrollment': '#f59e0b',
+    'Claims': '#14b8a6', 'Transportation': '#06b6d4', 'Quality': '#22c55e', 'Billing': '#f97316',
+    'Authorization': '#a855f7', 'Member Services': '#3b82f6', 'Provider Network': '#64748b',
+    'Reporting': '#10b981', 'Administration': '#78716c',
+};
+
+const LAYER_STYLES = {
+    frontend: { bg: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', label: 'FE' },
+    backend:  { bg: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24', label: 'BE' },
+    both:     { bg: 'rgba(236, 72, 153, 0.12)', color: '#f472b6', label: 'Both' },
+    unknown:  { bg: 'rgba(100, 116, 139, 0.12)', color: '#94a3b8', label: '?' },
+};
 
 export default function Dashboard() {
     const { sessionToken } = useAuthSession();
@@ -22,8 +37,20 @@ export default function Dashboard() {
     });
 
     const { data: gapsData, isLoading: isGapsLoading } = useQuery({
-        queryKey: ['gaps', { page_size: 5, status: 'open' }],
-        queryFn: () => apiClient.getGaps({ page_size: 5, status: 'open' }),
+        queryKey: ['gaps', { page_size: 10, status: 'open' }],
+        queryFn: () => apiClient.getGaps({ page_size: 10, status: 'open' }),
+        enabled: !!sessionToken,
+    });
+
+    const { data: regsData } = useQuery({
+        queryKey: ['regulations', { page_size: 50 }],
+        queryFn: () => apiClient.getRegulations({ page_size: 50 }),
+        enabled: !!sessionToken,
+    });
+
+    const { data: gapsSummary } = useQuery({
+        queryKey: ['gaps-summary'],
+        queryFn: () => apiClient.getGapsSummary(),
         enabled: !!sessionToken,
     });
 
@@ -31,23 +58,35 @@ export default function Dashboard() {
         return <div className="loading-card"><div className="loading-spinner" /></div>;
     }
 
-    // Use mock data if API isn't connected yet
+    // Use mock only for dashboard API; regulations and gaps come from live data
     const dashboard = dashboardData || {
-        regulations: { total: 12, proposed: 3, comment_period: 2, final_rule: 5, effective: 2, avg_relevance: 0.78 },
-        gaps: { total: 24, critical: 3, high: 7, open: 14, resolved: 10, total_effort_hours: 320 },
         communications: { total: 8, drafts: 2, pending_approval: 1, sent: 5 },
         isMock: true,
     };
-    
-    // AI generated gaps from DB
+
     const recentGaps = gapsData?.items || [];
+    const regulations = regsData?.items || [];
+    const gapSummary = gapsSummary || { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
+
+    // Live statistics from actual data
+    const regCount = regsData?.total || regulations.length || 0;
+    const totalGaps = gapSummary.total || 0;
+    const criticalGaps = gapSummary.critical || 0;
+
+    // Module heatmap from all gaps
+    const moduleHeatmap = {};
+    recentGaps.forEach(g => {
+        (g.affected_modules || []).forEach(m => {
+            moduleHeatmap[m] = (moduleHeatmap[m] || 0) + 1;
+        });
+    });
+    const sortedModules = Object.entries(moduleHeatmap).sort((a, b) => b[1] - a[1]);
 
     return (
         <div className="animate-in">
             <div className="page-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <h1 className="page-title">Compliance Dashboard</h1>
-                    {dashboard.isMock && <span className="badge badge-medium">MOCK DATA</span>}
                 </div>
                 <p className="page-description">
                     Real-time overview of PACE regulatory compliance posture for PaceCareOnline
@@ -59,12 +98,12 @@ export default function Dashboard() {
                 <div className="stat-card animate-in stagger-1" style={{ '--stat-gradient': 'var(--gradient-primary)' }}>
                     <div className="stat-label">
                         <FileText size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                        Tracked Regulations
+                        Regulations Tracked
                     </div>
-                    <div className="stat-value">{dashboard.regulations.total}</div>
+                    <div className="stat-value">{regCount}</div>
                     <div className="stat-change">
                         <TrendingUp size={12} />
-                        {dashboard.regulations.proposed} proposed
+                        from Federal Register AI analysis
                     </div>
                 </div>
 
@@ -73,41 +112,82 @@ export default function Dashboard() {
                         <AlertTriangle size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
                         Open Gaps
                     </div>
-                    <div className="stat-value">{dashboard.gaps.open}</div>
+                    <div className="stat-value">{totalGaps}</div>
                     <div className="stat-change" style={{ color: 'var(--color-critical)' }}>
-                        {dashboard.gaps.critical} critical
+                        {criticalGaps} critical
                     </div>
                 </div>
 
                 <div className="stat-card animate-in stagger-3" style={{ '--stat-gradient': 'var(--gradient-success)' }}>
                     <div className="stat-label">
                         <Send size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                        Communications Sent
+                        Communications
                     </div>
-                    <div className="stat-value">{dashboard.communications.sent}</div>
+                    <div className="stat-value">
+                        {dashboard.communications?.sent || 0}
+                        {dashboard.isMock && <PreviewBadge />}
+                    </div>
                     <div className="stat-change">
-                        {dashboard.communications.drafts} drafts pending
+                        {dashboard.communications?.drafts || 0} drafts pending
                     </div>
                 </div>
 
                 <div className="stat-card animate-in stagger-4" style={{ '--stat-gradient': 'var(--gradient-info)' }}>
                     <div className="stat-label">
                         <Activity size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                        Estimated Effort
+                        Module Impact
                     </div>
-                    <div className="stat-value">{dashboard.gaps.total_effort_hours}h</div>
+                    <div className="stat-value">{sortedModules.length}</div>
                     <div className="stat-change">
-                        {dashboard.gaps.resolved} gaps resolved
+                        PCO modules affected
                     </div>
                 </div>
             </div>
 
-            {/* AI Identified Gaps */}
-            <div className="card">
+            {/* Module Heatmap */}
+            {sortedModules.length > 0 && (
+                <div style={{ marginTop: 'var(--space-6)' }}>
+                    <div className="card">
+                        <div className="card-header">
+                            <div>
+                                <h2 className="card-title">Module Impact Heatmap</h2>
+                                <p className="card-subtitle">PCO modules ranked by number of compliance gaps</p>
+                            </div>
+                            <Shield size={20} color="var(--color-accent)" />
+                        </div>
+                        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', padding: '0 var(--space-4) var(--space-4)' }}>
+                            {sortedModules.map(([mod, count]) => {
+                                const maxCount = sortedModules[0]?.[1] || 1;
+                                const intensity = Math.max(0.3, count / maxCount);
+                                const color = MODULE_COLORS[mod] || '#64748b';
+                                return (
+                                    <div key={mod} style={{
+                                        padding: '8px 14px', borderRadius: 'var(--radius-lg)',
+                                        background: `${color}${Math.round(intensity * 30).toString(16).padStart(2, '0')}`,
+                                        border: `1px solid ${color}${Math.round(intensity * 50).toString(16).padStart(2, '0')}`,
+                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        transition: 'transform 0.2s', cursor: 'default',
+                                    }}>
+                                        <span style={{ color, fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>{mod}</span>
+                                        <span style={{
+                                            background: color, color: '#fff', borderRadius: 'var(--radius-full)',
+                                            padding: '1px 8px', fontSize: 'var(--font-size-xs)', fontWeight: 700,
+                                            minWidth: 20, textAlign: 'center',
+                                        }}>{count}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Identified Gaps — with regulation linking */}
+            <div className="card" style={{ marginTop: 'var(--space-6)' }}>
                 <div className="card-header">
                     <div>
                         <h2 className="card-title">AI Identified Gaps</h2>
-                        <p className="card-subtitle">Recent actionable requirements extracted by Claude 3 Bedrock</p>
+                        <p className="card-subtitle">Recent compliance gaps linked to source regulations</p>
                     </div>
                     <AlertTriangle size={20} color="var(--color-critical)" />
                 </div>
@@ -115,40 +195,66 @@ export default function Dashboard() {
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th>Requirement Title</th>
-                            <th>Target Modules</th>
+                            <th>Gap</th>
+                            <th>Regulation</th>
+                            <th>Modules</th>
+                            <th>Layer</th>
                             <th>Severity</th>
-                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         {recentGaps.length === 0 ? (
                             <tr>
-                                <td colSpan="4" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-                                    No compliance gaps identified yet. (Waiting for scraper AI analysis)
+                                <td colSpan="5" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+                                    No compliance gaps identified yet. Run AI analysis to begin.
                                 </td>
                             </tr>
-                        ) : recentGaps.map((g) => (
+                        ) : recentGaps.slice(0, 8).map((g) => (
                             <tr key={g.id}>
-                                <td style={{ color: 'var(--color-text-primary)', fontWeight: 500, maxWidth: '400px', whiteSpace: 'normal' }}>
-                                    {g.title}
-                                    {g.is_new_requirement && (
-                                        <span className="badge badge-accent" style={{ marginLeft: '8px', fontSize: '10px' }}>NEW</span>
-                                    )}
+                                <td style={{ maxWidth: 300 }}>
+                                    <div style={{ color: 'var(--color-text-primary)', fontWeight: 500, whiteSpace: 'normal' }}>
+                                        {g.title}
+                                        {g.is_new_requirement && (
+                                            <span className="badge badge-accent" style={{ marginLeft: 6, fontSize: '10px' }}>NEW</span>
+                                        )}
+                                    </div>
                                 </td>
-                                <td>{g.affected_modules && g.affected_modules.length > 0 ? g.affected_modules.join(', ') : 'Unassigned'}</td>
                                 <td>
-                                    <span style={{ 
+                                    {g.regulation ? (
+                                        <div style={{ fontSize: 'var(--font-size-xs)', maxWidth: 180 }}>
+                                            <div style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                                                {g.regulation.title?.slice(0, 50)}{g.regulation.title?.length > 50 ? '...' : ''}
+                                            </div>
+                                            {g.regulation.cfr_references?.length > 0 && (
+                                                <div style={{ color: 'var(--color-text-muted)', marginTop: 1 }}>
+                                                    {g.regulation.cfr_references[0]}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : '—'}
+                                </td>
+                                <td>
+                                    <div className="detail-tags">
+                                        {(g.affected_modules || []).slice(0, 2).map(m => (
+                                            <span key={m} className="detail-tag" style={{
+                                                background: `${MODULE_COLORS[m] || '#64748b'}22`,
+                                                color: MODULE_COLORS[m] || '#64748b',
+                                                fontSize: '10px',
+                                            }}>
+                                                {m}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </td>
+                                <td>
+                                    <LayerBadge layer={g.affected_layer} />
+                                </td>
+                                <td>
+                                    <span style={{
                                         color: g.severity === 'critical' ? 'var(--color-critical)' : g.severity === 'high' ? 'var(--color-danger)' : 'var(--color-warning)',
-                                        fontWeight: 600
+                                        fontWeight: 600,
                                     }}>
                                         {formatStatus(g.severity)}
-                                    </span>
-                                </td>
-                                <td>
-                                    <span className="badge badge-info">
-                                        <span className="badge-dot" />
-                                        {formatStatus(g.status)}
                                     </span>
                                 </td>
                             </tr>
@@ -157,44 +263,37 @@ export default function Dashboard() {
                 </table>
             </div>
 
-            {/* Relevance Overview */}
+            {/* Bottom cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>
                 <div className="card">
                     <div className="card-header">
-                        <h2 className="card-title">Compliance Score</h2>
+                        <h2 className="card-title">Severity Breakdown</h2>
                     </div>
-                    <div style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
-                        <div style={{
-                            fontSize: 'var(--font-size-4xl)',
-                            fontWeight: 800,
-                            background: 'var(--gradient-success)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                        }}>
-                            {Math.round((dashboard.gaps.resolved / Math.max(dashboard.gaps.total, 1)) * 100)}%
-                        </div>
-                        <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
-                            of identified gaps resolved
-                        </p>
+                    <div style={{ padding: 'var(--space-4)' }}>
+                        <SeverityBar label="Critical" count={gapSummary.critical} total={totalGaps} color="var(--color-critical)" />
+                        <SeverityBar label="High" count={gapSummary.high} total={totalGaps} color="var(--color-danger)" />
+                        <SeverityBar label="Medium" count={gapSummary.medium} total={totalGaps} color="var(--color-warning)" />
+                        <SeverityBar label="Low" count={gapSummary.low} total={totalGaps} color="var(--color-success)" />
                     </div>
                 </div>
 
                 <div className="card">
                     <div className="card-header">
-                        <h2 className="card-title">Avg. Relevance Score</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <h2 className="card-title">Exec Reporting</h2>
+                            <PreviewBadge />
+                        </div>
                     </div>
                     <div style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
                         <div style={{
-                            fontSize: 'var(--font-size-4xl)',
-                            fontWeight: 800,
-                            background: 'var(--gradient-primary)',
-                            WebkitBackgroundClip: 'text',
+                            fontSize: 'var(--font-size-4xl)', fontWeight: 800,
+                            background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
                         }}>
-                            {(dashboard.regulations.avg_relevance * 100).toFixed(0)}%
+                            Phase 3
                         </div>
                         <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
-                            average PACE relevance across {dashboard.regulations.total} regulations
+                            Executive dashboards & trend reports coming next
                         </p>
                     </div>
                 </div>
@@ -203,16 +302,45 @@ export default function Dashboard() {
     );
 }
 
-function getStatusColor(status) {
-    const map = {
-        proposed: 'info',
-        comment_period: 'warning',
-        final_rule: 'accent',
-        effective: 'success',
-    };
-    return map[status] || 'info';
+function PreviewBadge() {
+    return (
+        <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px',
+            borderRadius: 20, fontSize: '10px', fontWeight: 600,
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(249, 115, 22, 0.15))',
+            color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)',
+        }}>
+            <Layers size={8} />
+            Preview
+        </span>
+    );
+}
+
+function LayerBadge({ layer }) {
+    const style = LAYER_STYLES[layer] || LAYER_STYLES.unknown;
+    return (
+        <span style={{
+            display: 'inline-flex', padding: '2px 8px', borderRadius: 'var(--radius-full)',
+            fontSize: '10px', fontWeight: 600, background: style.bg, color: style.color,
+        }}>
+            {style.label}
+        </span>
+    );
+}
+
+function SeverityBar({ label, count, total, color }) {
+    const pct = total > 0 ? (count / total) * 100 : 0;
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <span style={{ width: 60, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{label}</span>
+            <div style={{ flex: 1, height: 8, background: 'var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 4, transition: 'width 0.5s ease' }} />
+            </div>
+            <span style={{ width: 30, textAlign: 'right', fontWeight: 700, fontSize: 'var(--font-size-sm)', color }}>{count}</span>
+        </div>
+    );
 }
 
 function formatStatus(status) {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    return (status || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
