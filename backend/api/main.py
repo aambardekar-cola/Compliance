@@ -82,7 +82,7 @@ async def shutdown():
 # ---- Health Check (no auth) ----
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy", "service": "pco-compliance-api", "version": "1.0.0"}
+    return {"status": "healthy", "service": "pco-compliance-api", "version": "1.0.1+debug"}
 
 
 # ---- Error Handlers ----
