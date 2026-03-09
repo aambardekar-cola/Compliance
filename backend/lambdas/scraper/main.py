@@ -12,9 +12,9 @@ from sqlalchemy import select
 
 from shared.db import get_db_session
 from shared.models import ComplianceRuleUrl, ScrapedContent
+from shared.logging import get_pipeline_logger
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_pipeline_logger("scraper")
 
 
 async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
@@ -75,7 +75,7 @@ async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
 
 async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
     """Fetch active URLs from DB, scrape them, and store changes."""
-    logger.info("Starting regulatory URL scraper")
+    await logger.info("Starting regulatory URL scraper")
     
     stats = {"urls_processed": 0, "updates_found": 0, "errors": 0}
     
@@ -87,69 +87,76 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
         active_urls = result.scalars().all()
         
         if not active_urls:
-            logger.info("No active compliance URLs found to scrape.")
+            await logger.warning("No active compliance URLs found to scrape.")
             return {"statusCode": 200, "body": json.dumps(stats)}
             
+        await logger.info(f"Found {len(active_urls)} active URLs to process.")
+        
         async with httpx.AsyncClient() as client:
             for rule_url in active_urls:
-                logger.info(f"Scraping: {rule_url.name} ({rule_url.url})")
-                text_content = await scrape_url(client, rule_url.url)
-                
-                if not text_content:
-                    stats["errors"] += 1
-                    continue
+                await logger.info(f"Scraping: {rule_url.name}", {"url": rule_url.url, "id": str(rule_url.id)})
+                try:
+                    text_content = await scrape_url(client, rule_url.url)
                     
-                # Hash the text to check for changes
-                content_hash = hashlib.sha256(text_content.encode("utf-8")).hexdigest()
-                
-                # Check the most recent scrape for this URL
-                recent_scrape = await session.execute(
-                    select(ScrapedContent)
-                    .where(ScrapedContent.url_id == rule_url.id)
-                    .order_by(ScrapedContent.scraped_at.desc())
-                    .limit(1)
-                )
-                last_scrape = recent_scrape.scalar_one_or_none()
-                
-                if not last_scrape or last_scrape.content_hash != content_hash:
-                    # Content has changed or is new, insert new record
-                    logger.info(f"New or updated content detected for '{rule_url.name}'")
-                    new_content = ScrapedContent(
-                        url_id=rule_url.id,
-                        content_text=text_content,
-                        content_hash=content_hash,
-                        is_processed=False
+                    if not text_content:
+                        await logger.error(f"Failed to scrape {rule_url.name}: No content returned", {"url": rule_url.url})
+                        stats["errors"] += 1
+                        continue
+                        
+                    # Hash the text to check for changes
+                    content_hash = hashlib.sha256(text_content.encode("utf-8")).hexdigest()
+                    
+                    # Check the most recent scrape for this URL
+                    recent_scrape = await session.execute(
+                        select(ScrapedContent)
+                        .where(ScrapedContent.url_id == rule_url.id)
+                        .order_by(ScrapedContent.scraped_at.desc())
+                        .limit(1)
                     )
-                    session.add(new_content)
+                    last_scrape = recent_scrape.scalar_one_or_none()
                     
-                    # We must flush to get the new_content ID
-                    await session.flush()
+                    if not last_scrape or last_scrape.content_hash != content_hash:
+                        # Content has changed or is new, insert new record
+                        await logger.info(f"New or updated content detected for '{rule_url.name}'")
+                        new_content = ScrapedContent(
+                            url_id=rule_url.id,
+                            content_text=text_content,
+                            content_hash=content_hash,
+                            is_processed=False
+                        )
+                        session.add(new_content)
+                        
+                        # We must flush to get the new_content ID
+                        await session.flush()
+                        
+                        # Queue for gap analysis
+                        queue_url = os.environ.get("ANALYSIS_QUEUE_URL")
+                        if queue_url:
+                            try:
+                                sqs = boto3.client("sqs")
+                                sqs.send_message(
+                                    QueueUrl=queue_url,
+                                    MessageBody=json.dumps({
+                                        "scraped_content_id": str(new_content.id),
+                                        "url_name": rule_url.name
+                                    })
+                                )
+                                await logger.info(f"Queued ScrapedContent {new_content.id} for analysis.")
+                            except Exception as e:
+                                await logger.error(f"Failed to queue for analysis: {e}", exc_info=True)
+                        
+                        stats["updates_found"] += 1
+                    else:
+                        await logger.info(f"No changes detected for '{rule_url.name}'")
                     
-                    # Queue for gap analysis
-                    queue_url = os.environ.get("ANALYSIS_QUEUE_URL")
-                    if queue_url:
-                        try:
-                            sqs = boto3.client("sqs")
-                            sqs.send_message(
-                                QueueUrl=queue_url,
-                                MessageBody=json.dumps({
-                                    "scraped_content_id": str(new_content.id),
-                                    "url_name": rule_url.name
-                                })
-                            )
-                            logger.info(f"Queued ScrapedContent {new_content.id} for analysis.")
-                        except Exception as e:
-                            logger.error(f"Failed to queue for analysis: {e}")
-                    
-                    stats["updates_found"] += 1
-                else:
-                    logger.info(f"No changes detected for '{rule_url.name}'")
-                
-                stats["urls_processed"] += 1
+                    stats["urls_processed"] += 1
+                except Exception as e:
+                    await logger.error(f"Unexpected error scraping {rule_url.name}: {e}", {"url": rule_url.url}, exc_info=True)
+                    stats["errors"] += 1
 
         await session.commit()
     
-    logger.info(f"Scraper completed: {stats}")
+    await logger.info(f"Scraper completed: {stats}")
     return {
         "statusCode": 200,
         "body": json.dumps(stats)

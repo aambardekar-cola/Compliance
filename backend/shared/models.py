@@ -386,3 +386,23 @@ class AuditLog(Base):
         Index("ix_audit_action", "action"),
         Index("ix_audit_created", "created_at"),
     )
+
+
+class PipelineLog(Base):
+    """Internal log entries for the ingestion and analysis pipeline."""
+    __tablename__ = "pipeline_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    component = Column(String(100), nullable=False)  # "scraper", "analysis", "ingestion"
+    level = Column(String(20), nullable=False)  # "INFO", "WARNING", "ERROR"
+    message = Column(Text, nullable=False)
+    details = Column(JSON, nullable=True)  # Extra context (e.g., URL ID, doc ID)
+    stack_trace = Column(Text, nullable=True)
+    
+    timestamp = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_pipeline_logs_component", "component"),
+        Index("ix_pipeline_logs_timestamp", "timestamp"),
+        Index("ix_pipeline_logs_level", "level"),
+    )

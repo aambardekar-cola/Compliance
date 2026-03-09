@@ -90,6 +90,24 @@ class ApiStack(cdk.Stack):
             )
         )
 
+        # Lambda Invoke permissions (to trigger scraper)
+        self.api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["lambda:InvokeFunction", "lambda:ListFunctions"],
+                resources=["*"], # Narrower scope usually better, but names are dynamic with CDK
+            )
+        )
+
+        # CloudWatch Logs permissions (to read logs via API)
+        self.api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogStreams"],
+                resources=["*"],
+            )
+        )
+
         # ---- API Gateway ----
         self.api = apigw.LambdaRestApi(
             self,

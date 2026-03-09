@@ -1,13 +1,17 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
-from shared.models import ComplianceRuleUrl, UserRole
+from shared.models import ComplianceRuleUrl, ScrapedContent, ComplianceGap, PipelineLog, UserRole
 from api.middleware.auth import require_role
+from shared.logging import get_pipeline_logger
+
+logger = get_pipeline_logger("admin")
 
 router = APIRouter()
 
@@ -34,6 +38,17 @@ class ComplianceUrlResponse(ComplianceUrlBase):
     class Config:
         from_attributes = True
 
+class PipelineLogResponse(BaseModel):
+    id: UUID
+    component: str
+    level: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+    stack_trace: Optional[str] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
 
 # ---- Routes ----
 
@@ -64,7 +79,7 @@ async def update_url(url_id: UUID, url_data: ComplianceUrlUpdate, session: Async
     
     if not url_obj:
         raise HTTPException(status_code=404, detail="URL not found")
-        
+    
     for key, value in url_data.model_dump(exclude_unset=True).items():
         setattr(url_obj, key, value)
         
@@ -89,11 +104,14 @@ async def delete_url(url_id: UUID, session: AsyncSession = Depends(get_session_d
 
 @router.get("/diagnostics", dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
 async def get_diagnostics(session: AsyncSession = Depends(get_session_dependency)):
-    """Internal diagnostic endpoint to check pipeline state."""
-    from shared.models import ScrapedContent, ComplianceGap
+    """Get internal pipeline status and recent activity."""
+    scraped_count_result = await session.execute(select(func.count()).select_from(ScrapedContent))
+    gap_count_result = await session.execute(select(func.count()).select_from(ComplianceGap))
+    log_count_result = await session.execute(select(func.count()).select_from(PipelineLog))
     
-    scraped_count = await session.execute(select(func.count(ScrapedContent.id)))
-    gap_count = await session.execute(select(func.count(ComplianceGap.id)))
+    scraped_count = scraped_count_result.scalar()
+    gap_count = gap_count_result.scalar()
+    log_count = log_count_result.scalar()
     
     latest_scrapes = await session.execute(
         select(ScrapedContent).order_by(ScrapedContent.scraped_at.desc()).limit(5)
@@ -105,8 +123,9 @@ async def get_diagnostics(session: AsyncSession = Depends(get_session_dependency
     
     return {
         "counts": {
-            "scraped_content": scraped_count.scalar(),
-            "compliance_gaps": gap_count.scalar()
+            "scraped_content": scraped_count,
+            "compliance_gaps": gap_count,
+            "pipeline_logs": log_count
         },
         "latest_scrapes": [
             {"id": str(s.id), "url_id": str(s.url_id), "scraped_at": s.scraped_at.isoformat(), "is_processed": s.is_processed}
@@ -117,3 +136,53 @@ async def get_diagnostics(session: AsyncSession = Depends(get_session_dependency
             for g in latest_gaps.scalars().all()
         ]
     }
+
+@router.get("/logs", response_model=List[PipelineLogResponse], dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
+async def list_pipeline_logs(
+    component: Optional[str] = None,
+    level: Optional[str] = None,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_session_dependency)
+):
+    """List internal pipeline logs with filtering."""
+    query = select(PipelineLog).order_by(PipelineLog.timestamp.desc()).limit(limit)
+    
+    if component:
+        query = query.where(PipelineLog.component == component)
+    if level:
+        query = query.where(PipelineLog.level == level)
+        
+    result = await session.execute(query)
+    return result.scalars().all()
+
+@router.post("/trigger-scraper", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
+async def trigger_scraper_manually():
+    """Manually trigger the scraper Lambda."""
+    import boto3
+    import os
+    
+    deploy_env = os.environ.get("APP_ENV", "dev")
+    lambda_client = boto3.client("lambda", region_name="us-east-2")
+    
+    try:
+        functions = lambda_client.list_functions()
+        scraper_name = None
+        for f in functions.get("Functions", []):
+            name = f["FunctionName"]
+            if "ScraperHandler" in name and deploy_env in name:
+                scraper_name = name
+                break
+        
+        if not scraper_name:
+            await logger.error("Scraper Lambda function not found")
+            raise HTTPException(status_code=404, detail="Scraper Lambda not found")
+            
+        lambda_client.invoke(
+            FunctionName=scraper_name,
+            InvocationType="Event"
+        )
+        await logger.info(f"Manually triggered scraper: {scraper_name}")
+        return {"status": "triggered", "function": scraper_name}
+    except Exception as e:
+        await logger.error(f"Failed to trigger scraper: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
