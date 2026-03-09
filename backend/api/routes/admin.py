@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.db import get_session_dependency
 from shared.models import ComplianceRuleUrl, ScrapedContent, ComplianceGap, PipelineLog, UserRole
 from api.middleware.auth import require_role
+import importlib
+import traceback
 from shared.logging import get_pipeline_logger
 
 logger = get_pipeline_logger("admin")
@@ -198,9 +200,6 @@ async def verify_modules():
         "lambdas.scraper.main",
         "analysis.handler"
     ]
-    
-    import traceback
-    import importlib
     
     for mod_name in modules_to_check:
         try:
