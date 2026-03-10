@@ -38,6 +38,7 @@ RESPONSE=$(aws lambda invoke \
     --function-name "$FUNCTION_NAME" \
     --payload '{"command": "upgrade", "revision": "head"}' \
     --cli-binary-format raw-in-base64-out \
+    --cli-read-timeout 300 \
     /tmp/migration-response.json \
     --query 'StatusCode' \
     --output text 2>&1)

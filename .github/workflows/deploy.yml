@@ -192,7 +192,7 @@ jobs:
           cd infrastructure
           MIGRATION_ARN=$(jq -r '.["pco-compliance-dev-data"].MigrationLambdaArn' cdk-outputs.json)
           FUNCTION_NAME=$(echo "$MIGRATION_ARN" | awk -F: '{print $NF}')
-          aws lambda invoke --function-name "$FUNCTION_NAME" --payload '{"command": "seed"}' --cli-binary-format raw-in-base64-out out.json
+          aws lambda invoke --function-name "$FUNCTION_NAME" --payload '{"command": "seed"}' --cli-binary-format raw-in-base64-out --cli-read-timeout 300 out.json
           cat out.json
           if grep -q "error" out.json; then echo "Seeding Failed!"; exit 1; fi
       - name: Trigger Scraper Analysis
