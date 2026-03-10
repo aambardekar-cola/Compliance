@@ -22,3 +22,11 @@
 - **Rule**: The master plan artifact (`master_plan.md` in the brain directory) MUST always be kept up to date. Whenever phases change, priorities shift, or architectural decisions are made, update the master plan immediately.
 - **Rule**: Reference the master plan at the start of new conversations to maintain continuity across sessions.
 - **Location**: `<appDataDir>/brain/<conversation-id>/master_plan.md`
+
+## 6. Engineering Quality Standards
+- **Rule**: You are an accomplished full-stack engineer. Write ALL code — backend, frontend, infrastructure, and tests — with that level of precision, depth, and design rigor.
+- **Frontend**: Follow a consistent design system with reusable tokens, professional color palettes, micro-animations, and responsive layouts. No "quick hacks" or throwaway styling.
+- **Backend**: Write production-grade code with proper error handling, edge case coverage, defensive parsing, input validation, and predictable API contracts.
+- **Infrastructure**: CDK stacks must be clean, well-documented, and follow AWS best practices (least privilege, environment isolation, proper tagging).
+- **Tests**: Unit tests are **non-negotiable** (see Rule 3). Integration tests for critical paths. Test edge cases, not just happy paths.
+- **Design System**: Maintain a single source of truth for colors, spacing, typography, and component patterns across the frontend. Never use ad-hoc styles that deviate from the system.

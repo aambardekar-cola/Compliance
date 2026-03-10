@@ -10,6 +10,8 @@ import {
     Shield,
     Globe,
     Server,
+    Bell,
+    Activity,
 } from 'lucide-react';
 
 const navItems = [
@@ -93,6 +95,20 @@ export default function Sidebar() {
                         >
                             <Server />
                             <span>Environments</span>
+                        </NavLink>
+                        <NavLink
+                            to="/admin/notifications"
+                            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                        >
+                            <Bell />
+                            <span>Notifications</span>
+                        </NavLink>
+                        <NavLink
+                            to="/admin/pipeline-health"
+                            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                        >
+                            <Activity />
+                            <span>Pipeline Health</span>
                         </NavLink>
                     </div>
                 )}

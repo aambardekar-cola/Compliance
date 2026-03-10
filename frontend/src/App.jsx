@@ -11,6 +11,8 @@ import ExecSummary from './pages/ExecSummary';
 import Settings from './pages/Settings';
 import AdminUrls from './pages/AdminUrls';
 import AdminEnvironments from './pages/AdminEnvironments';
+import NotificationCenter from './pages/NotificationCenter';
+import PipelineHealth from './pages/PipelineHealth';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isSessionLoading } = useAuthSession();
@@ -50,6 +52,8 @@ function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin/urls" element={<AdminUrls />} />
                 <Route path="/admin/environments" element={<AdminEnvironments />} />
+                <Route path="/admin/notifications" element={<NotificationCenter />} />
+                <Route path="/admin/pipeline-health" element={<PipelineHealth />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>

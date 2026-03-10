@@ -125,19 +125,27 @@ async def init_db():
         
         # Incremental schema migrations — ALTER TABLE won't be run by create_all
         # on existing tables, so we add new columns explicitly (idempotent).
-        migrations = [
-            # Phase 1.5: Incremental chunking
-            "ALTER TABLE scraped_content ADD COLUMN IF NOT EXISTS chunks_processed INTEGER DEFAULT 0",
-            "ALTER TABLE scraped_content ADD COLUMN IF NOT EXISTS total_chunks INTEGER",
-            # Phase 2: Regulation→Gap linking + module mapping
-            "DO $$ BEGIN CREATE TYPE affectedlayer AS ENUM ('frontend','backend','both','unknown'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
-            "ALTER TABLE compliance_gaps ADD COLUMN IF NOT EXISTS regulation_id UUID REFERENCES regulations(id) ON DELETE SET NULL",
-            "ALTER TABLE compliance_gaps ADD COLUMN IF NOT EXISTS affected_layer affectedlayer DEFAULT 'unknown'",
-            "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS scraped_content_id UUID REFERENCES scraped_content(id) ON DELETE SET NULL",
-            "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS document_chunk_hash VARCHAR(64)",
-        ]
-        for sql in migrations:
-            await conn.execute(text(sql))
+        # These are PostgreSQL-specific (DO $$ blocks, IF NOT EXISTS on ALTER TABLE).
+        # SQLite uses create_all above which handles the full schema.
+        dialect_name = engine.dialect.name
+        if dialect_name == "postgresql":
+            migrations = [
+                # Phase 1.5: Incremental chunking
+                "ALTER TABLE scraped_content ADD COLUMN IF NOT EXISTS chunks_processed INTEGER DEFAULT 0",
+                "ALTER TABLE scraped_content ADD COLUMN IF NOT EXISTS total_chunks INTEGER",
+                # Phase 2: Regulation→Gap linking + module mapping
+                "DO $$ BEGIN CREATE TYPE affectedlayer AS ENUM ('frontend','backend','both','unknown'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+                "ALTER TABLE compliance_gaps ADD COLUMN IF NOT EXISTS regulation_id UUID REFERENCES regulations(id) ON DELETE SET NULL",
+                "ALTER TABLE compliance_gaps ADD COLUMN IF NOT EXISTS affected_layer affectedlayer DEFAULT 'unknown'",
+                "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS scraped_content_id UUID REFERENCES scraped_content(id) ON DELETE SET NULL",
+                "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS document_chunk_hash VARCHAR(64)",
+                # Phase 2.5: Pipeline observability & notifications
+                "DO $$ BEGIN CREATE TYPE pipelineruntype AS ENUM ('scraper','ingestion','analysis'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+                "DO $$ BEGIN CREATE TYPE pipelinerunstatus AS ENUM ('started','completed','failed','partial'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+                "DO $$ BEGIN CREATE TYPE notificationtype AS ENUM ('pipeline_completed','pipeline_failed','new_regulations','new_gaps','error','info'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+            ]
+            for sql in migrations:
+                await conn.execute(text(sql))
             
     logger.info("Database schema initialized")
 

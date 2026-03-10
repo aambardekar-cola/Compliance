@@ -87,6 +87,31 @@ class UserRole(str, PyEnum):
     CLIENT_USER = "client_user"
 
 
+class PipelineRunType(str, PyEnum):
+    """Type of pipeline run."""
+    SCRAPER = "scraper"
+    INGESTION = "ingestion"
+    ANALYSIS = "analysis"
+
+
+class PipelineRunStatus(str, PyEnum):
+    """Status of a pipeline run."""
+    STARTED = "started"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PARTIAL = "partial"  # Some chunks succeeded, some failed
+
+
+class NotificationType(str, PyEnum):
+    """Type of admin notification."""
+    PIPELINE_COMPLETED = "pipeline_completed"
+    PIPELINE_FAILED = "pipeline_failed"
+    NEW_REGULATIONS = "new_regulations"
+    NEW_GAPS = "new_gaps"
+    ERROR = "error"
+    INFO = "info"
+
+
 # ---- Models ----
 
 class Tenant(Base):
@@ -423,4 +448,63 @@ class PipelineLog(Base):
         Index("ix_pipeline_logs_component", "component"),
         Index("ix_pipeline_logs_timestamp", "timestamp"),
         Index("ix_pipeline_logs_level", "level"),
+    )
+
+
+class PipelineRun(Base):
+    """Tracks each execution of the pipeline (scraper, ingestion, or analysis)."""
+    __tablename__ = "pipeline_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_type = Column(Enum(PipelineRunType, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    status = Column(Enum(PipelineRunStatus, values_callable=lambda x: [e.value for e in x]), default=PipelineRunStatus.STARTED, nullable=False)
+
+    # Timing
+    started_at = Column(DateTime, server_default=func.now(), nullable=False)
+    ended_at = Column(DateTime, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+
+    # Stats
+    urls_scraped = Column(Integer, default=0)
+    chunks_processed = Column(Integer, default=0)
+    regulations_added = Column(Integer, default=0)
+    gaps_added = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0)
+
+    # Details
+    error_message = Column(Text, nullable=True)
+    details = Column(JSON, default=dict)  # Extra context, e.g. chunk IDs, URL IDs
+
+    # Relationships
+    notifications = relationship("AdminNotification", back_populates="pipeline_run")
+
+    __table_args__ = (
+        Index("ix_pipeline_runs_type", "run_type"),
+        Index("ix_pipeline_runs_status", "status"),
+        Index("ix_pipeline_runs_started", "started_at"),
+    )
+
+
+class AdminNotification(Base):
+    """In-app notification for admin users."""
+    __tablename__ = "admin_notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pipeline_run_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_runs.id", ondelete="SET NULL"), nullable=True)
+
+    notification_type = Column(Enum(NotificationType, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    title = Column(String(500), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+
+    metadata_json = Column(JSON, default=dict)  # Extra structured data (stats, links, etc.)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    # Relationships
+    pipeline_run = relationship("PipelineRun", back_populates="notifications")
+
+    __table_args__ = (
+        Index("ix_admin_notifs_type", "notification_type"),
+        Index("ix_admin_notifs_read", "is_read"),
+        Index("ix_admin_notifs_created", "created_at"),
     )

@@ -129,6 +129,43 @@ class ApiClient {
             method: 'DELETE',
         });
     }
+
+    // Admin Notifications
+    getNotifications(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/admin/notifications${query ? `?${query}` : ''}`);
+    }
+
+    getUnreadCount() {
+        return this.request('/admin/notifications/unread-count');
+    }
+
+    markNotificationRead(id) {
+        return this.request(`/admin/notifications/${id}/read`, { method: 'POST' });
+    }
+
+    markAllNotificationsRead() {
+        return this.request('/admin/notifications/read-all', { method: 'POST' });
+    }
+
+    // Pipeline Runs
+    getPipelineRuns(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/admin/pipeline-runs${query ? `?${query}` : ''}`);
+    }
+
+    getPipelineRun(id) {
+        return this.request(`/admin/pipeline-runs/${id}`);
+    }
+
+    // Admin Triggers
+    triggerAnalysis() {
+        return this.request('/admin/trigger-analysis', { method: 'POST' });
+    }
+
+    triggerScraper() {
+        return this.request('/admin/trigger-scraper', { method: 'POST' });
+    }
 }
 
 export const apiClient = new ApiClient();
