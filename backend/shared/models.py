@@ -15,6 +15,7 @@ from sqlalchemy import (
     Enum,
     JSON,
     Index,
+    text,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -518,7 +519,7 @@ class SystemConfig(Base):
     """Admin-configurable system settings (key-value store)."""
     __tablename__ = "system_configs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
     key = Column(String(255), unique=True, nullable=False)
     value = Column(JSON, nullable=False)  # Arbitrary JSON value
     description = Column(Text, nullable=True)
