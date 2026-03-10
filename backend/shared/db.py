@@ -146,9 +146,9 @@ async def init_db():
                 "DO $$ BEGIN ALTER TYPE regulationstatus ADD VALUE IF NOT EXISTS 'unknown'; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
                 "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS program_area JSONB DEFAULT '[]'::jsonb",
                 "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS gap_analysis_requested BOOLEAN DEFAULT FALSE",
-                # Phase 2.7: system_configs — remove stale index from prior buggy deploy
-                # (create_all handles table creation; the old raw SQL left a conflicting index)
+                # Phase 2.7: system_configs — fix stale index + ensure id has server default
                 "DROP INDEX IF EXISTS ix_system_configs_key",
+                "ALTER TABLE system_configs ALTER COLUMN id SET DEFAULT gen_random_uuid()",
                 # Seed default gap_analysis_statuses config (idempotent)
                 """INSERT INTO system_configs (key, value, description)
                 VALUES ('gap_analysis_statuses', '["final_rule", "effective"]'::jsonb,
