@@ -248,3 +248,50 @@ async def trigger_analysis(session: AsyncSession = Depends(get_session_dependenc
     
     await logger.info(f"Manually triggered analysis for {queued} unprocessed items")
     return {"status": "triggered", "queued": queued, "total_unprocessed": len(unprocessed)}
+
+@router.post("/reset-data", dependencies=[Depends(require_role([UserRole.INTERNAL_ADMIN]))])
+async def reset_data_and_rescrape(session: AsyncSession = Depends(get_session_dependency)):
+    """Wipe all derived data (gaps, regulations, scraped content) and re-trigger the scraper.
+
+    Keeps compliance_rule_urls intact so the scraper picks up all configured URLs.
+    """
+    import boto3
+    from sqlalchemy import text
+
+    await logger.info("Admin reset-data initiated — truncating derived tables")
+
+    # Truncate in dependency order (CASCADE handles FK refs)
+    for table in ["compliance_gaps", "regulations", "scraped_content",
+                   "pipeline_logs", "pipeline_runs", "admin_notifications"]:
+        await session.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
+    await session.commit()
+    await logger.info("All derived tables truncated successfully")
+
+    # Re-trigger scraper
+    deploy_env = os.environ.get("APP_ENV", "dev")
+    lambda_client = boto3.client("lambda", region_name="us-east-2")
+    scraper_triggered = False
+    scraper_name = None
+
+    try:
+        functions = lambda_client.list_functions()
+        for f in functions.get("Functions", []):
+            name = f["FunctionName"]
+            if "ScraperHandler" in name and deploy_env in name:
+                scraper_name = name
+                break
+
+        if scraper_name:
+            lambda_client.invoke(FunctionName=scraper_name, InvocationType="Event")
+            scraper_triggered = True
+            await logger.info(f"Scraper triggered after reset: {scraper_name}")
+    except Exception as e:
+        await logger.error(f"Failed to trigger scraper after reset: {e}")
+
+    return {
+        "status": "reset_complete",
+        "tables_truncated": ["compliance_gaps", "regulations", "scraped_content",
+                             "pipeline_logs", "pipeline_runs", "admin_notifications"],
+        "scraper_triggered": scraper_triggered,
+        "scraper_function": scraper_name,
+    }
