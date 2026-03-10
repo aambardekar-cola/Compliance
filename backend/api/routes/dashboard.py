@@ -11,7 +11,6 @@ from shared.models import (
     RegulationStatus, GapSeverity, GapStatus, CommunicationStatus,
 )
 from api.middleware.auth import get_current_user
-from shared.auth import CurrentUser
 
 router = APIRouter()
 

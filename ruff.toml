@@ -1,0 +1,13 @@
+# Ruff Linter Configuration for Compliance Platform
+# Ensures CI `ruff check backend/` passes with zero errors.
+
+[lint]
+# Keep default rule selection (E + F), suppress false positives
+ignore = [
+    "E712",   # SQLAlchemy requires `== True` / `== False` for column comparisons
+    "E501",   # Line length handled by formatter, not blocker
+]
+
+[lint.per-file-ignores]
+# Alembic auto-generated migrations use imports after revision block
+"backend/migrations/versions/*.py" = ["E402"]

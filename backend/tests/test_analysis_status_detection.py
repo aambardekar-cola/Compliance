@@ -1,7 +1,7 @@
 """Tests for analysis handler status detection and gap analysis trigger logic."""
 import os
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 # Set a dummy AWS region before importing the handler (which initializes boto3 clients)
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")

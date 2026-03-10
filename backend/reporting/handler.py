@@ -1,5 +1,4 @@
 """Lambda handler for executive reporting — Phase 5 implementation."""
-import json
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 """SQLAlchemy models for the compliance platform database."""
 import uuid
-from datetime import datetime, date
 from enum import Enum as PyEnum
 
 from sqlalchemy import (

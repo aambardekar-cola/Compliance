@@ -2,9 +2,9 @@
 import json
 import logging
 from contextlib import asynccontextmanager
+import asyncio
 from typing import AsyncGenerator
 
-import boto3
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
@@ -17,14 +17,13 @@ _engine = None
 _session_factory = None
 
 
-import asyncio
+
 
 def _build_database_url() -> str:
     """Build the database URL from config or AWS Secrets Manager."""
     settings = get_settings()
 
     if settings.is_production and settings.db_secret_arn:
-        import boto3
         # In production, fetch credentials from Secrets Manager (non-blocking)
         # Note: Depending on event loop state, a synchronous call here
         # is dangerous. We will return the database URL directly but we should

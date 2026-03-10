@@ -1,6 +1,5 @@
 """LLM-based relevance scoring for PACE regulations."""
 import logging
-from typing import Optional
 
 from shared.llm import invoke_llm, RELEVANCE_SCORING_SYSTEM, RELEVANCE_SCORING_PROMPT
 from ingestion.sources.base import RawRegulation

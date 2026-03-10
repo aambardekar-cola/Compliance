@@ -2,9 +2,8 @@ import asyncio
 import json
 import logging
 import os
-from uuid import uuid4, UUID
+from uuid import UUID
 from unittest.mock import patch, MagicMock
-from io import BytesIO
 
 from sqlalchemy import select
 

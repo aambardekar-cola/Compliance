@@ -1,5 +1,4 @@
 """Lambda handler for communication generation — Phase 3 implementation."""
-import json
 import logging
 
 logger = logging.getLogger(__name__)

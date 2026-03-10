@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from mangum import Mangum
 
 from shared.config import get_settings
-from shared.db import init_db, close_db
+from shared.db import close_db
 from api.middleware.auth import AuthMiddleware
 from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin, notifications, system_config
 
@@ -17,7 +17,7 @@ class DebugMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         try:
             return await call_next(request)
-        except Exception as e:
+        except Exception:
             import traceback
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=500, content={"detail": "CRASH", "trace": traceback.format_exc()})

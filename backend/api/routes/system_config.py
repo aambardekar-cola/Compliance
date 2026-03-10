@@ -1,5 +1,5 @@
 """System Config API routes — admin key-value settings management."""
-from typing import Any, Optional, Union
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select

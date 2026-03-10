@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.db import get_session_dependency
 from shared.models import (
     AdminNotification, PipelineRun,
-    NotificationType, PipelineRunType, PipelineRunStatus,
+    PipelineRunStatus,
 )
 from api.middleware.auth import require_role
 

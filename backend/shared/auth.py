@@ -64,7 +64,7 @@ def validate_token(token: str) -> CurrentUser:
         jwt_response = client.validate_session(token)
 
         claims = jwt_response.get("jwt", {})
-        token_claims = jwt_response.get("token", {})
+        _ = jwt_response.get("token", {})  # token claims available if needed
 
         # Extract tenant information from Descope
         tenants = claims.get("tenants", {})

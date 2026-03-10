@@ -1,5 +1,4 @@
 """Reports API routes — executive summary reports."""
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request

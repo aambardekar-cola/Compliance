@@ -2,9 +2,7 @@ import logging
 import sys
 import traceback
 from typing import Any, Dict, Optional
-from datetime import datetime
 
-from sqlalchemy import insert
 from shared.db import get_db_session
 from shared.models import PipelineLog
 

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from shared.db import get_session_dependency
-from shared.models import ComplianceGap, Regulation, GapSeverity, GapStatus, AffectedLayer
+from shared.models import ComplianceGap, GapSeverity, GapStatus, AffectedLayer
 
 router = APIRouter()
 

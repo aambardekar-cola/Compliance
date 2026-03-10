@@ -13,6 +13,7 @@ from uuid import UUID
 from datetime import datetime, timedelta
 
 import boto3
+from botocore.config import Config as BotoConfig
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -34,7 +35,6 @@ HAIKU_MODEL_ID = os.environ.get(
 SONNET_MODEL_ID = os.environ.get(
     "BEDROCK_SONNET_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 )
-from botocore.config import Config as BotoConfig
 boto_client = boto3.client(
     "bedrock-runtime",
     config=BotoConfig(read_timeout=300, retries={"max_attempts": 2})
@@ -301,11 +301,11 @@ async def process_scraped_content(content_id: UUID) -> bool:
         try:
             # Pass 1: Filtering (Haiku) — skip if we already have progress
             if not content.chunks_processed or content.chunks_processed == 0:
-                await logger.info(f"Pass 1: Filtering content with Claude 3 Haiku", {"length": len(content.content_text)})
+                await logger.info("Pass 1: Filtering content with Claude 3 Haiku", {"length": len(content.content_text)})
                 is_relevant = await filter_relevant_content(content.content_text)
                 
                 if not is_relevant:
-                    await logger.info(f"Content identified as irrelevant, skipping analysis")
+                    await logger.info("Content identified as irrelevant, skipping analysis")
                     content.is_processed = True
                     await session.commit()
                     return True
@@ -313,7 +313,7 @@ async def process_scraped_content(content_id: UUID) -> bool:
                 await logger.info(f"Resuming from chunk {content.chunks_processed + 1}")
 
             # Pass 2: Two-stage chunked extraction with per-chunk persistence
-            await logger.info(f"Pass 2: Two-stage extraction (Regulations → Gaps)")
+            await logger.info("Pass 2: Two-stage extraction (Regulations → Gaps)")
             chunks = chunk_text(content.content_text)
             total = len(chunks)
             start_chunk = content.chunks_processed or 0
@@ -334,7 +334,6 @@ async def process_scraped_content(content_id: UUID) -> bool:
             
             for i in range(start_chunk, end_chunk):
                 chunk = chunks[i]
-                chunk_hash = hashlib.sha256(chunk.encode()).hexdigest()[:16]
                 await logger.info(f"Chunk {i+1}/{total} ({len(chunk)} chars)")
                 
                 # --- STAGE 1: Extract Regulations from this chunk ---

@@ -1,7 +1,6 @@
 """Amazon Bedrock LLM client wrapper for compliance analysis."""
 import json
 import logging
-from typing import Any
 
 import boto3
 
