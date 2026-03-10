@@ -300,7 +300,7 @@ async def process_scraped_content(content_id: UUID) -> bool:
                     cfr = str(reg_dict.get("cfr_citation", ""))[:200]
                     doc_hash = hashlib.sha256(f"{cfr}|{title}".encode()).hexdigest()
                     
-                    # Dedup: check if this regulation already exists by chunk hash
+                    # Dedup: check by chunk hash first
                     existing = await session.execute(
                         select(Regulation).where(
                             Regulation.document_chunk_hash == doc_hash
@@ -309,9 +309,23 @@ async def process_scraped_content(content_id: UUID) -> bool:
                     existing_reg = existing.scalar_one_or_none()
                     
                     if existing_reg:
-                        await logger.info(f"  Regulation already exists: {title[:80]}")
+                        await logger.info(f"  Regulation already exists (hash): {title[:80]}")
                         chunk_regulations.append(existing_reg)
                         continue
+                    
+                    # Dedup: also check by (source, source_id) unique constraint
+                    if cfr:
+                        existing_by_src = await session.execute(
+                            select(Regulation).where(
+                                Regulation.source == "federal_register",
+                                Regulation.source_id == cfr,
+                            )
+                        )
+                        existing_src_reg = existing_by_src.scalar_one_or_none()
+                        if existing_src_reg:
+                            await logger.info(f"  Regulation already exists (source_id): {cfr}")
+                            chunk_regulations.append(existing_src_reg)
+                            continue
                     
                     # Parse effective_date safely
                     eff_date = None
@@ -328,27 +342,43 @@ async def process_scraped_content(content_id: UUID) -> bool:
                         raw_areas = []
                     affected_areas = [a for a in raw_areas if a in PCO_MODULES]
                     
-                    new_reg = Regulation(
-                        scraped_content_id=content.id,
-                        source="federal_register",
-                        source_id=cfr or None,
-                        title=title,
-                        summary=str(reg_dict.get("summary", ""))[:5000],
-                        source_url=source_url,
-                        relevance_score=0.8,  # High relevance — passed Haiku filter
-                        affected_areas=affected_areas,
-                        key_requirements=reg_dict.get("key_requirements", []),
-                        status=RegulationStatus.PROPOSED,
-                        effective_date=eff_date,
-                        document_type=str(reg_dict.get("document_type", "final_rule"))[:100],
-                        cfr_references=[cfr] if cfr else [],
-                        agencies=["CMS"],
-                        document_chunk_hash=doc_hash,
-                    )
-                    session.add(new_reg)
-                    await session.flush()  # Get the ID
-                    chunk_regulations.append(new_reg)
-                    await logger.info(f"  + Regulation saved: {title[:80]}")
+                    try:
+                        new_reg = Regulation(
+                            scraped_content_id=content.id,
+                            source="federal_register",
+                            source_id=cfr or None,
+                            title=title,
+                            summary=str(reg_dict.get("summary", ""))[:5000],
+                            source_url=source_url,
+                            relevance_score=0.8,  # High relevance — passed Haiku filter
+                            affected_areas=affected_areas,
+                            key_requirements=reg_dict.get("key_requirements", []),
+                            status=RegulationStatus.PROPOSED,
+                            effective_date=eff_date,
+                            document_type=str(reg_dict.get("document_type", "final_rule"))[:100],
+                            cfr_references=[cfr] if cfr else [],
+                            agencies=["CMS"],
+                            document_chunk_hash=doc_hash,
+                        )
+                        session.add(new_reg)
+                        await session.flush()  # Get the ID
+                        chunk_regulations.append(new_reg)
+                        await logger.info(f"  + Regulation saved: {title[:80]}")
+                    except Exception as flush_err:
+                        await session.rollback()
+                        await logger.error(f"  ! Regulation insert failed: {title[:80]}: {flush_err}")
+                        # Try to recover by fetching the existing regulation
+                        if cfr:
+                            fallback = await session.execute(
+                                select(Regulation).where(
+                                    Regulation.source == "federal_register",
+                                    Regulation.source_id == cfr,
+                                )
+                            )
+                            fallback_reg = fallback.scalar_one_or_none()
+                            if fallback_reg:
+                                chunk_regulations.append(fallback_reg)
+                                await logger.info(f"  ~ Recovered existing regulation: {cfr}")
                 
                 # --- STAGE 2: Identify Gaps per Regulation ---
                 total_gaps = 0
@@ -396,8 +426,20 @@ async def process_scraped_content(content_id: UUID) -> bool:
                     await logger.info(f"Chunk {i+1}: {len(chunk_regulations)} regs → {total_gaps} gaps saved")
                 
                 # Update progress and commit after each chunk
-                content.chunks_processed = i + 1
-                await session.commit()
+                try:
+                    content.chunks_processed = i + 1
+                    await session.commit()
+                except Exception as commit_err:
+                    await session.rollback()
+                    await logger.error(f"Chunk {i+1} commit failed: {commit_err}")
+                    # Re-fetch content so we can continue with next chunk
+                    result = await session.execute(
+                        select(ScrapedContent).where(ScrapedContent.id == content_id)
+                    )
+                    content = result.scalar_one_or_none()
+                    if not content:
+                        await logger.error(f"Lost ScrapedContent {content_id} after rollback")
+                        return False
             
             # Mark as fully processed only if ALL chunks are done
             if content.chunks_processed >= total:
