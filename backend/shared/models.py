@@ -519,13 +519,10 @@ class SystemConfig(Base):
     __tablename__ = "system_configs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    key = Column(String(255), unique=True, nullable=False, index=True)
+    key = Column(String(255), unique=True, nullable=False)
     value = Column(JSON, nullable=False)  # Arbitrary JSON value
     description = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    __table_args__ = (
-        Index("ix_system_configs_key", "key", unique=True),
-    )
