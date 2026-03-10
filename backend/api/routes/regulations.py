@@ -3,7 +3,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,6 +11,7 @@ from shared.db import get_session_dependency
 from shared.models import Regulation, RegulationStatus
 
 router = APIRouter()
+
 
 
 @router.get("/regulations")
@@ -46,6 +47,14 @@ async def list_regulations(
         search_term = f"%{search}%"
         query = query.where(
             Regulation.title.ilike(search_term) | Regulation.summary.ilike(search_term)
+        )
+
+    # Filter by program area (JSON array contains)
+    program_area = request.query_params.get("program_area")
+    if program_area:
+        # PostgreSQL: check if JSONB array contains the value
+        query = query.where(
+            cast(Regulation.program_area, String).ilike(f'%"{program_area}"%')
         )
 
     # Get total count
@@ -92,6 +101,36 @@ async def get_regulation(
     return _serialize_regulation(regulation, detailed=True)
 
 
+@router.post("/regulations/{regulation_id}/request-gap-analysis")
+async def request_gap_analysis(
+    regulation_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_session_dependency),
+):
+    """Toggle gap_analysis_requested flag for a specific regulation.
+    
+    When enabled, this regulation will be included in the next gap analysis run
+    regardless of its status.
+    """
+    result = await db.execute(
+        select(Regulation).where(Regulation.id == regulation_id)
+    )
+    regulation = result.scalar_one_or_none()
+
+    if not regulation:
+        raise HTTPException(404, "Regulation not found")
+
+    regulation.gap_analysis_requested = not regulation.gap_analysis_requested
+    await db.commit()
+    await db.refresh(regulation)
+
+    return {
+        "id": str(regulation.id),
+        "gap_analysis_requested": regulation.gap_analysis_requested,
+        "message": f"Gap analysis {'requested' if regulation.gap_analysis_requested else 'cancelled'} for this regulation.",
+    }
+
+
 def _serialize_regulation(reg: Regulation, detailed: bool = False) -> dict:
     """Serialize a Regulation model to API response."""
     data = {
@@ -108,8 +147,10 @@ def _serialize_regulation(reg: Regulation, detailed: bool = False) -> dict:
         "document_type": reg.document_type,
         "agencies": reg.agencies or [],
         "affected_areas": reg.affected_areas or [],
+        "program_area": reg.program_area or [],
         "cfr_references": reg.cfr_references or [],
         "gap_count": len(reg.compliance_gaps) if reg.compliance_gaps else 0,
+        "gap_analysis_requested": getattr(reg, 'gap_analysis_requested', False),
         "ingested_at": reg.ingested_at.isoformat() if reg.ingested_at else None,
     }
 

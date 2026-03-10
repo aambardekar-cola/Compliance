@@ -70,6 +70,8 @@ For each regulation found, provide:
 - "affected_areas": A list of PCO modules this regulation impacts. ONLY use values from: """ + json.dumps(PCO_MODULES) + """
 - "effective_date": The effective date in ISO format (YYYY-MM-DD) if mentioned, or null
 - "document_type": One of: "proposed_rule", "final_rule", "guidance", "notice"
+- "regulation_status": The current status of this regulation. One of: "proposed", "comment_period", "final_rule", "effective", "unknown". Determine from context clues like "proposed rule", "final rule", "effective [date]", "comment period ends [date]", etc.
+- "program_area": Which federal program(s) this regulation applies to. One or more of: ["MA", "Part D", "PACE", "Medicaid", "General"]. Use "PACE" for PACE-specific rules, "MA" for Medicare Advantage, "Part D" for prescription drug plans, "Medicaid" for Medicaid-only rules, "General" for cross-cutting CMS rules.
 - "key_requirements": A list of 1-3 specific actionable requirements (strings)
 
 Rules:
@@ -201,6 +203,71 @@ def safe_affected_layer(val: Any) -> AffectedLayer:
         return AffectedLayer(str(val or "unknown").lower())
     except (ValueError, KeyError):
         return AffectedLayer.UNKNOWN
+
+
+def safe_regulation_status(val: Any) -> RegulationStatus:
+    """Parse regulation_status from AI output with defensive fallback to UNKNOWN."""
+    if not val:
+        return RegulationStatus.UNKNOWN
+    mapped = str(val).lower().strip()
+    # Map common AI output variations
+    status_aliases = {
+        "proposed": RegulationStatus.PROPOSED,
+        "proposed_rule": RegulationStatus.PROPOSED,
+        "proposed rule": RegulationStatus.PROPOSED,
+        "comment_period": RegulationStatus.COMMENT_PERIOD,
+        "comment period": RegulationStatus.COMMENT_PERIOD,
+        "final_rule": RegulationStatus.FINAL_RULE,
+        "final rule": RegulationStatus.FINAL_RULE,
+        "final": RegulationStatus.FINAL_RULE,
+        "effective": RegulationStatus.EFFECTIVE,
+        "archived": RegulationStatus.ARCHIVED,
+        "unknown": RegulationStatus.UNKNOWN,
+    }
+    return status_aliases.get(mapped, RegulationStatus.UNKNOWN)
+
+
+# Canonical program areas for consistent tagging
+PROGRAM_AREAS = ["MA", "Part D", "PACE", "Medicaid", "General"]
+
+
+def safe_program_area(val: Any) -> list:
+    """Parse and normalize program_area from AI output."""
+    if not val or not isinstance(val, list):
+        return []
+    return [a for a in val if a in PROGRAM_AREAS]
+
+
+async def get_gap_analysis_statuses() -> list:
+    """Read configured gap analysis trigger statuses from SystemConfig.
+    
+    Defaults to ["final_rule", "effective"] if no config exists.
+    """
+    try:
+        from shared.models import SystemConfig
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(SystemConfig).where(SystemConfig.key == "gap_analysis_statuses")
+            )
+            config = result.scalar_one_or_none()
+            if config and isinstance(config.value, list):
+                return config.value
+    except Exception as e:
+        await logger.error(f"Failed to read gap_analysis_statuses config: {e}")
+    return ["final_rule", "effective"]
+
+
+async def should_run_gap_analysis(reg) -> bool:
+    """Determine if gap analysis should run for a given regulation.
+    
+    Returns True if:
+    - The regulation's status is in the configured trigger statuses, OR
+    - The regulation has been manually flagged (gap_analysis_requested=True)
+    """
+    if getattr(reg, 'gap_analysis_requested', False):
+        return True
+    allowed_statuses = await get_gap_analysis_statuses()
+    return reg.status.value in allowed_statuses
 
 
 async def process_scraped_content(content_id: UUID) -> bool:
@@ -353,7 +420,8 @@ async def process_scraped_content(content_id: UUID) -> bool:
                             relevance_score=0.8,  # High relevance — passed Haiku filter
                             affected_areas=affected_areas,
                             key_requirements=reg_dict.get("key_requirements", []),
-                            status=RegulationStatus.PROPOSED,
+                            status=safe_regulation_status(reg_dict.get("regulation_status")),
+                            program_area=safe_program_area(reg_dict.get("program_area")),
                             effective_date=eff_date,
                             document_type=str(reg_dict.get("document_type", "final_rule"))[:100],
                             cfr_references=[cfr] if cfr else [],
@@ -380,9 +448,15 @@ async def process_scraped_content(content_id: UUID) -> bool:
                                 chunk_regulations.append(fallback_reg)
                                 await logger.info(f"  ~ Recovered existing regulation: {cfr}")
                 
-                # --- STAGE 2: Identify Gaps per Regulation ---
+                # --- STAGE 2: Identify Gaps per Regulation (with configurable triggers) ---
                 total_gaps = 0
                 for reg in chunk_regulations:
+                    # Check if this regulation qualifies for gap analysis
+                    run_gaps = await should_run_gap_analysis(reg)
+                    if not run_gaps:
+                        await logger.info(f"  ⏭ Skipping gap analysis for '{reg.title[:60]}' (status={reg.status.value}, not in trigger list)")
+                        continue
+                    
                     gap_prompt = (
                         f"Given this regulatory requirement, identify compliance gaps:\n\n"
                         f"REGULATION: {reg.title}\n"

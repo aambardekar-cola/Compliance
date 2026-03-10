@@ -143,6 +143,24 @@ async def init_db():
                 "DO $$ BEGIN CREATE TYPE pipelineruntype AS ENUM ('scraper','ingestion','analysis'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
                 "DO $$ BEGIN CREATE TYPE pipelinerunstatus AS ENUM ('started','completed','failed','partial'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
                 "DO $$ BEGIN CREATE TYPE notificationtype AS ENUM ('pipeline_completed','pipeline_failed','new_regulations','new_gaps','error','info'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+                # Phase 2.7: Regulation lifecycle & configurable gap analysis
+                "DO $$ BEGIN ALTER TYPE regulationstatus ADD VALUE IF NOT EXISTS 'unknown'; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+                "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS program_area JSONB DEFAULT '[]'::jsonb",
+                "ALTER TABLE regulations ADD COLUMN IF NOT EXISTS gap_analysis_requested BOOLEAN DEFAULT FALSE",
+                # system_configs table (idempotent via IF NOT EXISTS)
+                """CREATE TABLE IF NOT EXISTS system_configs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    key VARCHAR(255) UNIQUE NOT NULL,
+                    value JSONB NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT now()
+                )""",
+                # Seed default gap_analysis_statuses config (idempotent)
+                """INSERT INTO system_configs (key, value, description)
+                VALUES ('gap_analysis_statuses', '["final_rule", "effective"]'::jsonb,
+                        'Regulation statuses that automatically trigger gap analysis')
+                ON CONFLICT (key) DO NOTHING""",
             ]
             for sql in migrations:
                 await conn.execute(text(sql))

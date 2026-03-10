@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuthSession } from '../auth/AuthProvider';
-import { Search, FileText, AlertTriangle, Layers } from 'lucide-react';
+import { Search, FileText, AlertTriangle, Layers, Crosshair } from 'lucide-react';
 import apiClient from '../api/client';
 
 const MOCK_REGULATIONS = [
@@ -10,19 +10,19 @@ const MOCK_REGULATIONS = [
         id: '1', source: 'federal_register', title: 'CY2026 PACE Final Rule — Service Delivery Timeframes & Care Coordination',
         summary: 'Establishes new maximum timeframes for service delivery, including 24-hour medication dispensing and 7-day service arrangement.',
         relevance_score: 0.95, status: 'final_rule', effective_date: '2026-01-01', agencies: ['CMS'],
-        affected_areas: ['Care Plan', 'IDT'], cfr_references: ['42 CFR §460.100'], gap_count: 4, isMock: true,
+        affected_areas: ['Care Plan', 'IDT'], program_area: ['PACE'], cfr_references: ['42 CFR §460.100'], gap_count: 4, isMock: true,
     },
     {
         id: '2', source: 'federal_register', title: 'PACE Participant Rights and Grievance Process Updates',
         summary: 'New formalized grievance process with 30-day resolution requirement.',
         relevance_score: 0.88, status: 'effective', effective_date: '2025-01-01', agencies: ['CMS'],
-        affected_areas: ['Member Services', 'Quality'], cfr_references: ['42 CFR §460.120'], gap_count: 3, isMock: true,
+        affected_areas: ['Member Services', 'Quality'], program_area: ['PACE', 'MA'], cfr_references: ['42 CFR §460.120'], gap_count: 3, isMock: true,
     },
     {
         id: '3', source: 'federal_register', title: 'Interoperability and Prior Authorization API Requirements for PACE',
         summary: 'Mandates standards-based APIs for health data sharing.',
         relevance_score: 0.82, status: 'proposed', effective_date: '2026-07-01', agencies: ['CMS', 'HHS'],
-        affected_areas: ['Administration', 'Reporting'], cfr_references: [], gap_count: 5, isMock: true,
+        affected_areas: ['Administration', 'Reporting'], program_area: ['General'], cfr_references: [], gap_count: 5, isMock: true,
     },
 ];
 
@@ -34,23 +34,36 @@ const MODULE_COLORS = {
     'Reporting': '#10b981', 'Administration': '#78716c',
 };
 
+// Color map for program area tags
+const PROGRAM_AREA_COLORS = {
+    'MA': '#6366f1', 'Part D': '#ec4899', 'PACE': '#22c55e', 'Medicaid': '#f59e0b', 'General': '#64748b',
+};
+
 export default function Regulations() {
     const { sessionToken } = useAuthSession();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [moduleFilter, setModuleFilter] = useState('');
+    const [programAreaFilter, setProgramAreaFilter] = useState('');
 
     apiClient.setToken(sessionToken);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['regulations', search, statusFilter],
-        queryFn: () => apiClient.getRegulations({ search, status: statusFilter }),
+        queryKey: ['regulations', search, statusFilter, programAreaFilter],
+        queryFn: () => apiClient.getRegulations({ search, status: statusFilter, program_area: programAreaFilter }),
         enabled: !!sessionToken,
+    });
+
+    const gapAnalysisMutation = useMutation({
+        mutationFn: (regulationId) => apiClient.requestGapAnalysis(regulationId),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['regulations'] }),
     });
 
     const regulations = data?.items || MOCK_REGULATIONS;
     const isMockData = !data?.items;
+    const totalCount = data?.total || regulations.length;
 
     // Filter by module client-side (API doesn't have this filter yet)
     const filtered = moduleFilter
@@ -67,6 +80,23 @@ export default function Regulations() {
                 <p className="page-description">
                     Regulations extracted from CMS, Federal Register, and other federal sources — linked to compliance gaps
                 </p>
+
+                {/* Count Summary Bar */}
+                <div style={{
+                    display: 'flex', gap: 'var(--space-4)', marginTop: 'var(--space-3)',
+                    padding: 'var(--space-3) var(--space-4)', borderRadius: 'var(--radius-md)',
+                    background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <FileText size={16} style={{ color: 'var(--color-accent)' }} />
+                        <span style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                            {totalCount}
+                        </span>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                            Regulations Tracked
+                        </span>
+                    </div>
+                </div>
 
                 <div className="page-actions">
                     <div className="input-group" style={{ minWidth: 300 }}>
@@ -85,6 +115,16 @@ export default function Regulations() {
                         <option value="comment_period">Comment Period</option>
                         <option value="final_rule">Final Rule</option>
                         <option value="effective">Effective</option>
+                        <option value="unknown">Unknown</option>
+                    </select>
+
+                    <select className="select" value={programAreaFilter} onChange={(e) => setProgramAreaFilter(e.target.value)}>
+                        <option value="">All Program Areas</option>
+                        <option value="MA">Medicare Advantage (MA)</option>
+                        <option value="Part D">Part D</option>
+                        <option value="PACE">PACE</option>
+                        <option value="Medicaid">Medicaid</option>
+                        <option value="General">General</option>
                     </select>
 
                     <select className="select" value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)}>
@@ -108,19 +148,20 @@ export default function Regulations() {
                         <thead>
                             <tr>
                                 <th>Regulation</th>
-                                <th>CFR</th>
+                                <th>Program</th>
                                 <th>Modules</th>
                                 <th>Gaps</th>
                                 <th>Relevance</th>
                                 <th>Status</th>
                                 <th>Effective</th>
+                                <th style={{ width: 40 }}></th>
                             </tr>
                         </thead>
                         <tbody>
                             {filtered.map((reg) => (
                                 <tr key={reg.id} onClick={() => navigate(`/regulations/${reg.id}`)} style={{ cursor: 'pointer' }}>
                                     <td>
-                                        <div style={{ maxWidth: 350 }}>
+                                        <div style={{ maxWidth: 300 }}>
                                             <div style={{ color: 'var(--color-text-primary)', fontWeight: 500, marginBottom: 4 }}>
                                                 {reg.title}
                                                 {reg.isMock && (
@@ -128,19 +169,28 @@ export default function Regulations() {
                                                 )}
                                             </div>
                                             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                                                {reg.summary?.slice(0, 100)}...
+                                                {reg.summary?.slice(0, 80)}...
                                             </div>
                                         </div>
                                     </td>
                                     <td>
-                                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', maxWidth: 150 }}>
-                                            {(reg.cfr_references || []).length > 0 ? reg.cfr_references[0] : '—'}
+                                        <div className="detail-tags" style={{ maxWidth: 140 }}>
+                                            {(reg.program_area || []).map((area) => (
+                                                <span key={area} className="detail-tag" style={{
+                                                    background: `${PROGRAM_AREA_COLORS[area] || '#64748b'}22`,
+                                                    color: PROGRAM_AREA_COLORS[area] || '#64748b',
+                                                    border: `1px solid ${PROGRAM_AREA_COLORS[area] || '#64748b'}44`,
+                                                    fontSize: 'var(--font-size-xs)',
+                                                }}>
+                                                    {area}
+                                                </span>
+                                            ))}
                                         </div>
                                     </td>
                                     <td>
-                                        <div className="detail-tags" style={{ maxWidth: 200 }}>
+                                        <div className="detail-tags" style={{ maxWidth: 180 }}>
                                             {(reg.affected_areas || []).slice(0, 3).map((area) => (
-                                                <span key={area} className="detail-tag" style={{ 
+                                                <span key={area} className="detail-tag" style={{
                                                     background: `${MODULE_COLORS[area] || '#64748b'}22`,
                                                     color: MODULE_COLORS[area] || '#64748b',
                                                     border: `1px solid ${MODULE_COLORS[area] || '#64748b'}44`,
@@ -155,7 +205,7 @@ export default function Regulations() {
                                     </td>
                                     <td>
                                         {reg.gap_count > 0 ? (
-                                            <span style={{ 
+                                            <span style={{
                                                 display: 'inline-flex', alignItems: 'center', gap: 4,
                                                 color: 'var(--color-critical)', fontWeight: 600, fontSize: 'var(--font-size-sm)',
                                             }}>
@@ -174,6 +224,23 @@ export default function Regulations() {
                                         </span>
                                     </td>
                                     <td style={{ fontSize: 'var(--font-size-sm)' }}>{reg.effective_date || '—'}</td>
+                                    <td>
+                                        <button
+                                            title={reg.gap_analysis_requested ? 'Gap analysis requested — click to cancel' : 'Request gap analysis for this regulation'}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                gapAnalysisMutation.mutate(reg.id);
+                                            }}
+                                            style={{
+                                                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                                                color: reg.gap_analysis_requested ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                                                opacity: reg.gap_analysis_requested ? 1 : 0.5,
+                                                transition: 'all 0.2s ease',
+                                            }}
+                                        >
+                                            <Crosshair size={16} />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -213,7 +280,7 @@ function RelevanceBar({ score }) {
 }
 
 function getStatusColor(status) {
-    const map = { proposed: 'info', comment_period: 'warning', final_rule: 'accent', effective: 'success', archived: 'medium' };
+    const map = { proposed: 'info', comment_period: 'warning', final_rule: 'accent', effective: 'success', archived: 'medium', unknown: 'medium' };
     return map[status] || 'info';
 }
 

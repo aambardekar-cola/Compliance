@@ -166,6 +166,29 @@ class ApiClient {
     triggerScraper() {
         return this.request('/admin/trigger-scraper', { method: 'POST' });
     }
+
+    // System Config
+    getSystemConfig(key) {
+        return this.request(`/admin/system-config/${key}`);
+    }
+
+    getSystemConfigs() {
+        return this.request('/admin/system-config');
+    }
+
+    updateSystemConfig(key, value, description) {
+        return this.request(`/admin/system-config/${key}`, {
+            method: 'PUT',
+            body: JSON.stringify({ value, description }),
+        });
+    }
+
+    // Per-regulation gap analysis
+    requestGapAnalysis(regulationId) {
+        return this.request(`/regulations/${regulationId}/request-gap-analysis`, {
+            method: 'POST',
+        });
+    }
 }
 
 export const apiClient = new ApiClient();

@@ -182,86 +182,8 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* AI Identified Gaps — with regulation linking */}
-            <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-                <div className="card-header">
-                    <div>
-                        <h2 className="card-title">AI Identified Gaps</h2>
-                        <p className="card-subtitle">Recent compliance gaps linked to source regulations</p>
-                    </div>
-                    <AlertTriangle size={20} color="var(--color-critical)" />
-                </div>
 
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th>Gap</th>
-                            <th>Regulation</th>
-                            <th>Modules</th>
-                            <th>Layer</th>
-                            <th>Severity</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {recentGaps.length === 0 ? (
-                            <tr>
-                                <td colSpan="5" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-                                    No compliance gaps identified yet. Run AI analysis to begin.
-                                </td>
-                            </tr>
-                        ) : recentGaps.slice(0, 8).map((g) => (
-                            <tr key={g.id}>
-                                <td style={{ maxWidth: 300 }}>
-                                    <div style={{ color: 'var(--color-text-primary)', fontWeight: 500, whiteSpace: 'normal' }}>
-                                        {g.title}
-                                        {g.is_new_requirement && (
-                                            <span className="badge badge-accent" style={{ marginLeft: 6, fontSize: '10px' }}>NEW</span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td>
-                                    {g.regulation ? (
-                                        <div style={{ fontSize: 'var(--font-size-xs)', maxWidth: 180 }}>
-                                            <div style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-                                                {g.regulation.title?.slice(0, 50)}{g.regulation.title?.length > 50 ? '...' : ''}
-                                            </div>
-                                            {g.regulation.cfr_references?.length > 0 && (
-                                                <div style={{ color: 'var(--color-text-muted)', marginTop: 1 }}>
-                                                    {g.regulation.cfr_references[0]}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : '—'}
-                                </td>
-                                <td>
-                                    <div className="detail-tags">
-                                        {(g.affected_modules || []).slice(0, 2).map(m => (
-                                            <span key={m} className="detail-tag" style={{
-                                                background: `${MODULE_COLORS[m] || '#64748b'}22`,
-                                                color: MODULE_COLORS[m] || '#64748b',
-                                                fontSize: '10px',
-                                            }}>
-                                                {m}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </td>
-                                <td>
-                                    <LayerBadge layer={g.affected_layer} />
-                                </td>
-                                <td>
-                                    <span style={{
-                                        color: g.severity === 'critical' ? 'var(--color-critical)' : g.severity === 'high' ? 'var(--color-danger)' : 'var(--color-warning)',
-                                        fontWeight: 600,
-                                    }}>
-                                        {formatStatus(g.severity)}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+
 
             {/* Bottom cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)', marginTop: 'var(--space-6)' }}>

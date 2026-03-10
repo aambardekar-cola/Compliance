@@ -1,9 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthSession } from '../auth/AuthProvider';
-import { Save, Link, Key, Bell, Shield } from 'lucide-react';
+import { Save, Link, Key, Bell, Shield, Crosshair } from 'lucide-react';
+import apiClient from '../api/client';
+
+const REGULATION_STATUSES = [
+    { value: 'proposed', label: 'Proposed', desc: 'Still in proposal stage — early visibility' },
+    { value: 'comment_period', label: 'Comment Period', desc: 'Open for public comment' },
+    { value: 'final_rule', label: 'Final Rule', desc: 'Finalized regulation — compliance required' },
+    { value: 'effective', label: 'Effective', desc: 'Currently in force' },
+];
 
 export default function Settings() {
     const { sessionToken } = useAuthSession();
+    const queryClient = useQueryClient();
+    apiClient.setToken(sessionToken);
 
     const [gitlab, setGitlab] = useState({
         url: 'https://gitlab.com',
@@ -18,6 +29,37 @@ export default function Settings() {
         project_key: '',
     });
 
+    // Gap analysis trigger statuses
+    const { data: gapConfig } = useQuery({
+        queryKey: ['system-config', 'gap_analysis_statuses'],
+        queryFn: () => apiClient.getSystemConfig('gap_analysis_statuses').catch(() => null),
+        enabled: !!sessionToken,
+    });
+
+    const [triggerStatuses, setTriggerStatuses] = useState(['final_rule', 'effective']);
+
+    useEffect(() => {
+        if (gapConfig?.value && Array.isArray(gapConfig.value)) {
+            setTriggerStatuses(gapConfig.value);
+        }
+    }, [gapConfig]);
+
+    const saveTriggersMutation = useMutation({
+        mutationFn: (statuses) => apiClient.updateSystemConfig(
+            'gap_analysis_statuses',
+            statuses,
+            'Regulation statuses that automatically trigger gap analysis'
+        ),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-config'] }),
+    });
+
+    const toggleStatus = (status) => {
+        setTriggerStatuses(prev => {
+            const next = prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status];
+            return next;
+        });
+    };
+
     return (
         <div className="animate-in">
             <div className="page-header">
@@ -28,6 +70,55 @@ export default function Settings() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
+                {/* Gap Analysis Triggers */}
+                <div className="card" style={{ gridColumn: 'span 2' }}>
+                    <div className="card-header">
+                        <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                            <Crosshair size={18} /> Gap Analysis Triggers
+                        </h2>
+                    </div>
+
+                    <div style={{ padding: 'var(--space-4)' }}>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
+                            Select which regulation statuses automatically trigger gap analysis during the nightly pipeline.
+                            Individual regulations can also be manually flagged from the Regulations page.
+                        </p>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+                            {REGULATION_STATUSES.map(({ value, label, desc }) => (
+                                <label key={value} style={{
+                                    display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)',
+                                    padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
+                                    border: `1px solid ${triggerStatuses.includes(value) ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                                    background: triggerStatuses.includes(value) ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                                    cursor: 'pointer', transition: 'all 0.2s ease',
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={triggerStatuses.includes(value)}
+                                        onChange={() => toggleStatus(value)}
+                                        style={{ accentColor: 'var(--color-accent)', marginTop: 2 }}
+                                    />
+                                    <div>
+                                        <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{label}</div>
+                                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>{desc}</div>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+
+                        <button
+                            className="btn btn-primary"
+                            style={{ marginTop: 'var(--space-4)' }}
+                            onClick={() => saveTriggersMutation.mutate(triggerStatuses)}
+                            disabled={saveTriggersMutation.isPending}
+                        >
+                            <Save size={14} />
+                            {saveTriggersMutation.isPending ? 'Saving...' : saveTriggersMutation.isSuccess ? 'Saved ✓' : 'Save Trigger Settings'}
+                        </button>
+                    </div>
+                </div>
+
                 {/* GitLab Configuration */}
                 <div className="card">
                     <div className="card-header">
@@ -166,3 +257,4 @@ export default function Settings() {
         </div>
     );
 }
+

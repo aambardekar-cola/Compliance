@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthSession } from '../auth/AuthProvider';
-import { AlertTriangle, Layers, Filter, FileText } from 'lucide-react';
+import { AlertTriangle, Layers, Filter, FileText, BarChart3 } from 'lucide-react';
 import apiClient from '../api/client';
 
 const MOCK_GAPS = [
@@ -47,20 +47,31 @@ export default function GapAnalysis() {
     const { sessionToken } = useAuthSession();
     const [severityFilter, setSeverityFilter] = useState('');
     const [layerFilter, setLayerFilter] = useState('');
+    const [regulationFilter, setRegulationFilter] = useState('');
     apiClient.setToken(sessionToken);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['gaps', severityFilter, layerFilter],
+        queryKey: ['gaps', severityFilter, layerFilter, regulationFilter],
         queryFn: () => apiClient.getGaps({
             page_size: 50,
             ...(severityFilter && { severity: severityFilter }),
             ...(layerFilter && { affected_layer: layerFilter }),
+            ...(regulationFilter && { regulation_id: regulationFilter }),
         }),
+        enabled: !!sessionToken,
+    });
+
+    // Fetch regulations for the dropdown filter
+    const { data: regsData } = useQuery({
+        queryKey: ['regulations-list'],
+        queryFn: () => apiClient.getRegulations({ page_size: 200 }),
         enabled: !!sessionToken,
     });
 
     const gaps = data?.items || MOCK_GAPS;
     const isMockData = !data?.items;
+    const totalCount = data?.total || gaps.length;
+    const availableRegs = regsData?.items || [];
 
     // Module heatmap: count gaps per PCO module
     const moduleHeatmap = {};
@@ -85,6 +96,23 @@ export default function GapAnalysis() {
                 <p className="page-description">
                     PACE compliance gaps identified per regulation — each gap tagged with affected PCO modules and application layer
                 </p>
+
+                {/* Count Summary Bar */}
+                <div style={{
+                    display: 'flex', gap: 'var(--space-4)', marginTop: 'var(--space-3)',
+                    padding: 'var(--space-3) var(--space-4)', borderRadius: 'var(--radius-md)',
+                    background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <BarChart3 size={16} style={{ color: 'var(--color-critical)' }} />
+                        <span style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                            {totalCount}
+                        </span>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                            Compliance Gaps Identified
+                        </span>
+                    </div>
+                </div>
             </div>
 
             {/* Module Heatmap */}
@@ -126,6 +154,13 @@ export default function GapAnalysis() {
                     <option value="frontend">Frontend</option>
                     <option value="backend">Backend</option>
                     <option value="both">Both</option>
+                </select>
+
+                <select className="select" value={regulationFilter} onChange={(e) => setRegulationFilter(e.target.value)} style={{ maxWidth: 240 }}>
+                    <option value="">All Regulations</option>
+                    {availableRegs.map(r => (
+                        <option key={r.id} value={r.id}>{r.title?.slice(0, 50)}{r.title?.length > 50 ? '...' : ''}</option>
+                    ))}
                 </select>
             </div>
 

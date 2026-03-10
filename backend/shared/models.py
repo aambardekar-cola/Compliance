@@ -36,6 +36,7 @@ class RegulationStatus(str, PyEnum):
     FINAL_RULE = "final_rule"
     EFFECTIVE = "effective"
     ARCHIVED = "archived"
+    UNKNOWN = "unknown"
 
 
 class GapSeverity(str, PyEnum):
@@ -231,6 +232,7 @@ class Regulation(Base):
     relevance_score = Column(Float, nullable=True)  # AI-determined relevance matching PCO domains
     affected_areas = Column(JSON, default=list)  # PCO modules: IDT, Care Plan, Pharmacy, etc.
     key_requirements = Column(JSON, default=list)  # Extracted requirements
+    program_area = Column(JSON, default=list)  # Program areas: MA, Part D, PACE, Medicaid, General
 
     # Status & Timeline
     status = Column(Enum(RegulationStatus, values_callable=lambda x: [e.value for e in x]), default=RegulationStatus.PROPOSED, nullable=False)
@@ -243,6 +245,9 @@ class Regulation(Base):
     agencies = Column(JSON, default=list)  # e.g., ["CMS", "HHS"]
     document_type = Column(String(100), nullable=True)  # "proposed_rule", "final_rule", "guidance"
     document_chunk_hash = Column(String(64), nullable=True)  # SHA-256 for dedup
+
+    # Phase 2.7: Per-regulation gap analysis control
+    gap_analysis_requested = Column(Boolean, default=False)  # Admin can flag for gap analysis regardless of status
 
     ingested_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -507,4 +512,21 @@ class AdminNotification(Base):
         Index("ix_admin_notifs_type", "notification_type"),
         Index("ix_admin_notifs_read", "is_read"),
         Index("ix_admin_notifs_created", "created_at"),
+    )
+
+
+class SystemConfig(Base):
+    """Admin-configurable system settings (key-value store)."""
+    __tablename__ = "system_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key = Column(String(255), unique=True, nullable=False, index=True)
+    value = Column(JSON, nullable=False)  # Arbitrary JSON value
+    description = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_system_configs_key", "key", unique=True),
     )

@@ -9,7 +9,7 @@ from mangum import Mangum
 from shared.config import get_settings
 from shared.db import init_db, close_db
 from api.middleware.auth import AuthMiddleware
-from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin, notifications
+from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin, notifications, system_config
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -66,6 +66,7 @@ app.include_router(reports.router, tags=["Reports"])
 app.include_router(subscriptions.router, tags=["Subscriptions"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 app.include_router(notifications.router, prefix="/admin", tags=["Notifications"])
+app.include_router(system_config.router, prefix="/admin", tags=["System Config"])
 
 
 # ---- Lifecycle Events ----

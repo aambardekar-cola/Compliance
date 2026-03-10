@@ -84,7 +84,18 @@ async def list_gaps(
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
+        "severity_summary": _count_severities(gaps),
     }
+
+
+def _count_severities(gaps) -> dict:
+    """Count gaps by severity for inline summary."""
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for g in gaps:
+        sev = g.severity.value if g.severity else "low"
+        if sev in counts:
+            counts[sev] += 1
+    return counts
 
 
 @router.get("/gaps/summary")
