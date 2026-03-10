@@ -29,19 +29,19 @@ SEED_URLS = [
         "description": "Official CMS guidance manual providing sub-regulatory details on operationalizing PACE requirements.",
     },
     {
-        "name": "HHS/OCR: HIPAA Security Rule Requirements",
-        "url": "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html",
-        "description": "Federal standards for protecting electronic protected health information (ePHI).",
+        "name": "eCFR Title 45 Part 164: HIPAA Security Rule",
+        "url": "https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164",
+        "description": "HIPAA Privacy, Security, and Breach Notification Rules from eCFR — the actual regulation text.",
     },
     {
-        "name": "Medicaid.gov: PACE Program Overview & Memos",
-        "url": "https://www.medicaid.gov/medicaid/long-term-services-supports/program-all-inclusive-care-elderly/index.html",
-        "description": "Central repository for State/Federal Medicaid PACE coordination, eligibility guidance, and official memos.",
+        "name": "Federal Register: CY 2027 MA/PACE Proposed Rule",
+        "url": "https://www.federalregister.gov/documents/2025/11/28/2025-21456/medicare-program-contract-year-2027-policy-and-technical-changes-to-the-medicare-advantage-program",
+        "description": "Latest CY2027 Medicare Advantage and PACE proposed rule covering policy and technical changes.",
     },
     {
-        "name": "CMS.gov: PACE Quality Reporting Requirements",
-        "url": "https://www.cms.gov/medicare/quality/pace-quality-reporting",
-        "description": "Official requirements for PACE quality data submission and performance monitoring.",
+        "name": "CMS.gov: PACE Program Overview",
+        "url": "https://www.cms.gov/medicare/health-plans/pace/overview",
+        "description": "CMS PACE program overview page with quality requirements and program information.",
     }
 ]
 

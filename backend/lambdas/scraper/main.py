@@ -20,6 +20,17 @@ from shared.logging import get_pipeline_logger
 
 logger = get_pipeline_logger("scraper")
 
+# Browser-like UA — many .gov sites block simple bot identifiers
+SCRAPER_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 PaceCareOnline/1.0"
+)
+SCRAPER_HEADERS = {
+    "User-Agent": SCRAPER_UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
 
 async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
     """Fetch structured JSON/XML for known Gov APIs, else fallback to HTML."""
@@ -54,13 +65,13 @@ async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
             if target:
                 issue_date = target.get("latest_issue_date")
                 api_url = f"https://www.ecfr.gov/api/versioner/v1/full/{issue_date}/title-{title}.xml?part={part}"
-                r = await client.get(api_url, headers={"User-Agent": "PaceCareOnline/1.0"})
+                r = await client.get(api_url, headers=SCRAPER_HEADERS)
                 r.raise_for_status()
                 soup = BeautifulSoup(r.text, "html.parser")
                 return soup.get_text(separator="\n", strip=True)
 
         # Fallback HTML scraping (e.g. CMS)
-        response = await client.get(url, timeout=30.0, follow_redirects=True, headers={"User-Agent": "PaceCareOnline/1.0"})
+        response = await client.get(url, timeout=30.0, follow_redirects=True, headers=SCRAPER_HEADERS)
         response.raise_for_status()
         
         # Parse HTML and extract visible text
