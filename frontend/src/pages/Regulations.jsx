@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuthSession } from '../auth/AuthProvider';
-import { Search, FileText, AlertTriangle, Layers, Crosshair } from 'lucide-react';
+import { Search, FileText, AlertTriangle, Layers, Crosshair, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import apiClient from '../api/client';
 
 const MOCK_REGULATIONS = [
@@ -47,12 +47,19 @@ export default function Regulations() {
     const [statusFilter, setStatusFilter] = useState('');
     const [moduleFilter, setModuleFilter] = useState('');
     const [programAreaFilter, setProgramAreaFilter] = useState('');
+    const [page, setPage] = useState(1);
+    const pageSize = 20;
+
+    // Reset page when filters change
+    const handleSearch = useCallback((val) => { setSearch(val); setPage(1); }, []);
+    const handleStatusFilter = useCallback((val) => { setStatusFilter(val); setPage(1); }, []);
+    const handleProgramAreaFilter = useCallback((val) => { setProgramAreaFilter(val); setPage(1); }, []);
 
     apiClient.setToken(sessionToken);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['regulations', search, statusFilter, programAreaFilter],
-        queryFn: () => apiClient.getRegulations({ search, status: statusFilter, program_area: programAreaFilter }),
+        queryKey: ['regulations', search, statusFilter, programAreaFilter, page],
+        queryFn: () => apiClient.getRegulations({ search, status: statusFilter, program_area: programAreaFilter, page, page_size: pageSize }),
         enabled: !!sessionToken,
     });
 
@@ -64,6 +71,7 @@ export default function Regulations() {
     const regulations = data?.items || MOCK_REGULATIONS;
     const isMockData = !data?.items;
     const totalCount = data?.total || regulations.length;
+    const totalPages = data?.total_pages || 1;
 
     // Filter by module client-side (API doesn't have this filter yet)
     const filtered = moduleFilter
@@ -105,11 +113,11 @@ export default function Regulations() {
                             type="text"
                             placeholder="Search regulations..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => handleSearch(e.target.value)}
                         />
                     </div>
 
-                    <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <select className="select" value={statusFilter} onChange={(e) => handleStatusFilter(e.target.value)}>
                         <option value="">All Statuses</option>
                         <option value="proposed">Proposed</option>
                         <option value="comment_period">Comment Period</option>
@@ -118,7 +126,7 @@ export default function Regulations() {
                         <option value="unknown">Unknown</option>
                     </select>
 
-                    <select className="select" value={programAreaFilter} onChange={(e) => setProgramAreaFilter(e.target.value)}>
+                    <select className="select" value={programAreaFilter} onChange={(e) => handleProgramAreaFilter(e.target.value)}>
                         <option value="">All Program Areas</option>
                         <option value="MA">Medicare Advantage (MA)</option>
                         <option value="Part D">Part D</option>
@@ -245,6 +253,42 @@ export default function Regulations() {
                             ))}
                         </tbody>
                     </table>
+                )}
+
+                {/* Pagination Controls */}
+                {!isLoading && totalPages > 1 && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: 'var(--space-3) var(--space-4)',
+                        borderTop: '1px solid var(--color-border)',
+                        background: 'var(--color-bg-secondary)',
+                        borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+                    }}>
+                        <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                            Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                            <button className="btn btn-sm btn-ghost" disabled={page <= 1} onClick={() => setPage(1)} title="First page">
+                                <ChevronsLeft size={16} />
+                            </button>
+                            <button className="btn btn-sm btn-ghost" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} title="Previous page">
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span style={{
+                                fontSize: 'var(--font-size-sm)', fontWeight: 600,
+                                color: 'var(--color-text-primary)',
+                                padding: '0 var(--space-2)',
+                            }}>
+                                {page} / {totalPages}
+                            </span>
+                            <button className="btn btn-sm btn-ghost" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} title="Next page">
+                                <ChevronRight size={16} />
+                            </button>
+                            <button className="btn btn-sm btn-ghost" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Last page">
+                                <ChevronsRight size={16} />
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

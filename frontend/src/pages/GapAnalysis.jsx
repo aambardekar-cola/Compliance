@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthSession } from '../auth/AuthProvider';
-import { AlertTriangle, Layers, Filter, FileText, BarChart3 } from 'lucide-react';
+import { AlertTriangle, Layers, Filter, FileText, BarChart3, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import apiClient from '../api/client';
 
 const MOCK_GAPS = [
@@ -48,12 +48,21 @@ export default function GapAnalysis() {
     const [severityFilter, setSeverityFilter] = useState('');
     const [layerFilter, setLayerFilter] = useState('');
     const [regulationFilter, setRegulationFilter] = useState('');
+    const [page, setPage] = useState(1);
+    const pageSize = 25;
+
+    // Reset page when filters change
+    const handleSeverityFilter = useCallback((val) => { setSeverityFilter(val); setPage(1); }, []);
+    const handleLayerFilter = useCallback((val) => { setLayerFilter(val); setPage(1); }, []);
+    const handleRegulationFilter = useCallback((val) => { setRegulationFilter(val); setPage(1); }, []);
+
     apiClient.setToken(sessionToken);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['gaps', severityFilter, layerFilter, regulationFilter],
+        queryKey: ['gaps', severityFilter, layerFilter, regulationFilter, page],
         queryFn: () => apiClient.getGaps({
-            page_size: 50,
+            page,
+            page_size: pageSize,
             ...(severityFilter && { severity: severityFilter }),
             ...(layerFilter && { affected_layer: layerFilter }),
             ...(regulationFilter && { regulation_id: regulationFilter }),
@@ -71,6 +80,7 @@ export default function GapAnalysis() {
     const gaps = data?.items || MOCK_GAPS;
     const isMockData = !data?.items;
     const totalCount = data?.total || gaps.length;
+    const totalPages = data?.total_pages || 1;
     const availableRegs = regsData?.items || [];
 
     // Module heatmap: count gaps per PCO module
@@ -141,7 +151,7 @@ export default function GapAnalysis() {
 
                 <div style={{ flex: 1 }} />
 
-                <select className="select" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
+                <select className="select" value={severityFilter} onChange={(e) => handleSeverityFilter(e.target.value)}>
                     <option value="">All Severities</option>
                     <option value="critical">Critical</option>
                     <option value="high">High</option>
@@ -149,14 +159,14 @@ export default function GapAnalysis() {
                     <option value="low">Low</option>
                 </select>
 
-                <select className="select" value={layerFilter} onChange={(e) => setLayerFilter(e.target.value)}>
+                <select className="select" value={layerFilter} onChange={(e) => handleLayerFilter(e.target.value)}>
                     <option value="">All Layers</option>
                     <option value="frontend">Frontend</option>
                     <option value="backend">Backend</option>
                     <option value="both">Both</option>
                 </select>
 
-                <select className="select" value={regulationFilter} onChange={(e) => setRegulationFilter(e.target.value)} style={{ maxWidth: 240 }}>
+                <select className="select" value={regulationFilter} onChange={(e) => handleRegulationFilter(e.target.value)} style={{ maxWidth: 240 }}>
                     <option value="">All Regulations</option>
                     {availableRegs.map(r => (
                         <option key={r.id} value={r.id}>{r.title?.slice(0, 50)}{r.title?.length > 50 ? '...' : ''}</option>
@@ -251,6 +261,42 @@ export default function GapAnalysis() {
                             ))}
                         </tbody>
                     </table>
+                )}
+
+                {/* Pagination Controls */}
+                {!isLoading && totalPages > 1 && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: 'var(--space-3) var(--space-4)',
+                        borderTop: '1px solid var(--color-border)',
+                        background: 'var(--color-bg-secondary)',
+                        borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+                    }}>
+                        <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                            Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                            <button className="btn btn-sm btn-ghost" disabled={page <= 1} onClick={() => setPage(1)} title="First page">
+                                <ChevronsLeft size={16} />
+                            </button>
+                            <button className="btn btn-sm btn-ghost" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} title="Previous page">
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span style={{
+                                fontSize: 'var(--font-size-sm)', fontWeight: 600,
+                                color: 'var(--color-text-primary)',
+                                padding: '0 var(--space-2)',
+                            }}>
+                                {page} / {totalPages}
+                            </span>
+                            <button className="btn btn-sm btn-ghost" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} title="Next page">
+                                <ChevronRight size={16} />
+                            </button>
+                            <button className="btn btn-sm btn-ghost" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Last page">
+                                <ChevronsRight size={16} />
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>
