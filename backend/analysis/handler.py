@@ -10,7 +10,7 @@ import os
 import hashlib
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import boto3
 from sqlalchemy import select
@@ -455,11 +455,115 @@ async def process_scraped_content(content_id: UUID) -> bool:
             return False
 
 
+async def _cleanup_stale_runs(max_age_minutes: int = 10) -> int:
+    """Auto-close pipeline runs stuck at 'started' for too long (Lambda timeout)."""
+    cleaned = 0
+    try:
+        from sqlalchemy import and_
+        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(PipelineRun).where(
+                    and_(
+                        PipelineRun.status == PipelineRunStatus.STARTED,
+                        PipelineRun.started_at < cutoff,
+                    )
+                )
+            )
+            stale_runs = result.scalars().all()
+            for run in stale_runs:
+                run.status = PipelineRunStatus.FAILED
+                run.ended_at = datetime.utcnow()
+                run.duration_seconds = (run.ended_at - run.started_at).total_seconds()
+                run.error_message = "Auto-closed: Lambda timed out before finalization"
+                cleaned += 1
+            if cleaned:
+                await session.commit()
+                await logger.info(f"Cleaned up {cleaned} stale pipeline run(s)")
+    except Exception as e:
+        await logger.error(f"Failed to clean stale runs: {e}")
+    return cleaned
+
+
+async def _finalize_pipeline_run(
+    pipeline_run_id: Optional[UUID],
+    start_time: datetime,
+    records_processed: int,
+    total_regs: int,
+    total_gaps_added: int,
+    total_errors: int,
+    error_messages: List[str],
+) -> None:
+    """Finalize a PipelineRun record and create an AdminNotification."""
+    if not pipeline_run_id:
+        return
+
+    end_time = datetime.utcnow()
+    duration = (end_time - start_time).total_seconds()
+
+    try:
+        async with get_db_session() as session:
+            run = await session.get(PipelineRun, pipeline_run_id)
+            if not run:
+                return
+
+            run.status = (
+                PipelineRunStatus.FAILED if total_errors > 0 and records_processed == 0
+                else PipelineRunStatus.PARTIAL if total_errors > 0
+                else PipelineRunStatus.COMPLETED
+            )
+            run.ended_at = end_time
+            run.duration_seconds = duration
+            run.chunks_processed = records_processed
+            run.regulations_added = max(total_regs, 0)
+            run.gaps_added = max(total_gaps_added, 0)
+            run.errors_count = total_errors
+            run.error_message = "; ".join(error_messages) if error_messages else None
+
+            # Create notification
+            if total_errors > 0 and records_processed == 0:
+                notif_type = NotificationType.PIPELINE_FAILED
+                title = "Analysis Pipeline Failed"
+                message = f"Analysis failed: {'; '.join(error_messages[:3])}"
+            else:
+                notif_type = NotificationType.PIPELINE_COMPLETED
+                title = "Analysis Pipeline Completed"
+                parts = []
+                if records_processed:
+                    parts.append(f"{records_processed} chunk(s) processed")
+                if total_regs > 0:
+                    parts.append(f"{total_regs} new regulation(s)")
+                if total_gaps_added > 0:
+                    parts.append(f"{total_gaps_added} new gap(s)")
+                if total_errors > 0:
+                    parts.append(f"{total_errors} error(s)")
+                message = ("Analysis completed: " + ", ".join(parts)) if parts else "Analysis completed with no changes."
+
+            notification = AdminNotification(
+                pipeline_run_id=pipeline_run_id,
+                notification_type=notif_type,
+                title=title,
+                message=message,
+                metadata_json={
+                    "chunks_processed": records_processed,
+                    "regulations_added": max(total_regs, 0),
+                    "gaps_added": max(total_gaps_added, 0),
+                    "errors": total_errors,
+                    "duration_seconds": round(duration, 1),
+                },
+            )
+            session.add(notification)
+            await session.commit()
+    except Exception as e:
+        await logger.error(f"Failed to finalize PipelineRun: {e}")
+
+
 async def run_analysis(event: Dict[str, Any]) -> Dict[str, Any]:
     """Parse SQS records and process them using the LLM logic.
     
     Creates a PipelineRun record to track this invocation,
     and an AdminNotification summarizing the results.
+    Uses try/finally to ensure the run is always finalized.
     """
     start_time = datetime.utcnow()
     total_regs = 0
@@ -467,9 +571,12 @@ async def run_analysis(event: Dict[str, Any]) -> Dict[str, Any]:
     total_errors = 0
     records_processed = 0
     error_messages = []
+    pipeline_run_id = None
 
-    # Create pipeline run record
-    pipeline_run = None
+    # Step 0: Clean up any stale "started" runs from previous Lambda timeouts
+    await _cleanup_stale_runs(max_age_minutes=10)
+
+    # Step 1: Create pipeline run record
     try:
         async with get_db_session() as session:
             pipeline_run = PipelineRun(
@@ -482,117 +589,66 @@ async def run_analysis(event: Dict[str, Any]) -> Dict[str, Any]:
             pipeline_run_id = pipeline_run.id
     except Exception as e:
         await logger.error(f"Failed to create PipelineRun: {e}")
-        pipeline_run_id = None
 
-    for record in event.get("Records", []):
-        try:
-            body = json.loads(record.get("body", "{}"))
-            content_id_str = body.get("scraped_content_id")
-            
-            if content_id_str:
-                content_id = UUID(content_id_str)
-                # Count regulations and gaps before processing
-                pre_regs = 0
-                pre_gaps = 0
-                try:
-                    async with get_db_session() as session:
-                        from sqlalchemy import func as sqla_func
-                        pre_regs = (await session.execute(
-                            select(sqla_func.count()).select_from(Regulation)
-                        )).scalar() or 0
-                        pre_gaps = (await session.execute(
-                            select(sqla_func.count()).select_from(ComplianceGap)
-                        )).scalar() or 0
-                except Exception:
-                    pass
+    # Step 2: Process SQS records — wrapped in try/finally for guaranteed finalization
+    try:
+        for record in event.get("Records", []):
+            try:
+                body = json.loads(record.get("body", "{}"))
+                content_id_str = body.get("scraped_content_id")
+                
+                if content_id_str:
+                    content_id = UUID(content_id_str)
+                    # Count regulations and gaps before processing
+                    pre_regs = 0
+                    pre_gaps = 0
+                    try:
+                        async with get_db_session() as session:
+                            from sqlalchemy import func as sqla_func
+                            pre_regs = (await session.execute(
+                                select(sqla_func.count()).select_from(Regulation)
+                            )).scalar() or 0
+                            pre_gaps = (await session.execute(
+                                select(sqla_func.count()).select_from(ComplianceGap)
+                            )).scalar() or 0
+                    except Exception:
+                        pass
 
-                success = await process_scraped_content(content_id)
-                records_processed += 1
+                    success = await process_scraped_content(content_id)
+                    records_processed += 1
 
-                # Count after processing
-                try:
-                    async with get_db_session() as session:
-                        from sqlalchemy import func as sqla_func
-                        post_regs = (await session.execute(
-                            select(sqla_func.count()).select_from(Regulation)
-                        )).scalar() or 0
-                        post_gaps = (await session.execute(
-                            select(sqla_func.count()).select_from(ComplianceGap)
-                        )).scalar() or 0
-                        total_regs += (post_regs - pre_regs)
-                        total_gaps_added += (post_gaps - pre_gaps)
-                except Exception:
-                    pass
+                    # Count after processing
+                    try:
+                        async with get_db_session() as session:
+                            from sqlalchemy import func as sqla_func
+                            post_regs = (await session.execute(
+                                select(sqla_func.count()).select_from(Regulation)
+                            )).scalar() or 0
+                            post_gaps = (await session.execute(
+                                select(sqla_func.count()).select_from(ComplianceGap)
+                            )).scalar() or 0
+                            total_regs += (post_regs - pre_regs)
+                            total_gaps_added += (post_gaps - pre_gaps)
+                    except Exception:
+                        pass
 
-                if not success:
+                    if not success:
+                        total_errors += 1
+                        error_messages.append(f"Content {content_id_str} failed")
+                else:
+                    await logger.error("SQS message missing scraped_content_id.")
                     total_errors += 1
-                    error_messages.append(f"Content {content_id_str} failed")
-            else:
-                await logger.error("SQS message missing scraped_content_id.")
+            except Exception as e:
+                await logger.error(f"Error processing SQS record: {e}", exc_info=True)
                 total_errors += 1
-        except Exception as e:
-            await logger.error(f"Error processing SQS record: {e}", exc_info=True)
-            total_errors += 1
-            error_messages.append(str(e)[:200])
-
-    # Update pipeline run with results
-    end_time = datetime.utcnow()
-    duration = (end_time - start_time).total_seconds()
-    
-    if pipeline_run_id:
-        try:
-            async with get_db_session() as session:
-                run = await session.get(PipelineRun, pipeline_run_id)
-                if run:
-                    run.status = (
-                        PipelineRunStatus.FAILED if total_errors > 0 and records_processed == 0
-                        else PipelineRunStatus.PARTIAL if total_errors > 0
-                        else PipelineRunStatus.COMPLETED
-                    )
-                    run.ended_at = end_time
-                    run.duration_seconds = duration
-                    run.chunks_processed = records_processed
-                    run.regulations_added = max(total_regs, 0)
-                    run.gaps_added = max(total_gaps_added, 0)
-                    run.errors_count = total_errors
-                    run.error_message = "; ".join(error_messages) if error_messages else None
-
-                    # Create notification
-                    if total_errors > 0 and records_processed == 0:
-                        notif_type = NotificationType.PIPELINE_FAILED
-                        title = "Analysis Pipeline Failed"
-                        message = f"Analysis failed: {'; '.join(error_messages[:3])}"
-                    else:
-                        notif_type = NotificationType.PIPELINE_COMPLETED
-                        title = "Analysis Pipeline Completed"
-                        parts = []
-                        if records_processed:
-                            parts.append(f"{records_processed} chunk(s) processed")
-                        if total_regs > 0:
-                            parts.append(f"{total_regs} new regulation(s)")
-                        if total_gaps_added > 0:
-                            parts.append(f"{total_gaps_added} new gap(s)")
-                        if total_errors > 0:
-                            parts.append(f"{total_errors} error(s)")
-                        message = "Analysis completed: " + ", ".join(parts) if parts else "Analysis completed with no changes."
-
-                    notification = AdminNotification(
-                        pipeline_run_id=pipeline_run_id,
-                        notification_type=notif_type,
-                        title=title,
-                        message=message,
-                        metadata_json={
-                            "chunks_processed": records_processed,
-                            "regulations_added": max(total_regs, 0),
-                            "gaps_added": max(total_gaps_added, 0),
-                            "errors": total_errors,
-                            "duration_seconds": round(duration, 1),
-                        },
-                    )
-                    session.add(notification)
-                    await session.commit()
-        except Exception as e:
-            await logger.error(f"Failed to update PipelineRun: {e}")
+                error_messages.append(str(e)[:200])
+    finally:
+        # Step 3: ALWAYS finalize the pipeline run, even on Lambda timeout
+        await _finalize_pipeline_run(
+            pipeline_run_id, start_time,
+            records_processed, total_regs, total_gaps_added,
+            total_errors, error_messages,
+        )
 
     return {"statusCode": 200, "body": "Gap analysis complete"}
 

@@ -1,11 +1,11 @@
 """Admin notification and pipeline run endpoints."""
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, desc, update
+from sqlalchemy import select, func, desc, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
@@ -196,3 +196,43 @@ async def get_pipeline_run(
     if not run:
         raise HTTPException(status_code=404, detail="Pipeline run not found")
     return PipelineRunOut.model_validate(run)
+
+
+@router.post("/pipeline-runs/cleanup-stale")
+async def cleanup_stale_runs(
+    max_age_minutes: int = Query(10, ge=1, le=60),
+    session: AsyncSession = Depends(get_session_dependency),
+    _user=Depends(require_role("internal_admin")),
+):
+    """Auto-close pipeline runs stuck at 'started' for longer than max_age_minutes.
+    
+    This handles Lambda timeouts where the finalization code never ran.
+    """
+    cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+    result = await session.execute(
+        select(PipelineRun).where(
+            and_(
+                PipelineRun.status == PipelineRunStatus.STARTED,
+                PipelineRun.started_at < cutoff,
+            )
+        )
+    )
+    stale_runs = result.scalars().all()
+
+    cleaned_ids = []
+    for run in stale_runs:
+        run.status = PipelineRunStatus.FAILED
+        run.ended_at = datetime.utcnow()
+        run.duration_seconds = (run.ended_at - run.started_at).total_seconds()
+        run.error_message = "Auto-closed: Lambda timed out before finalization"
+        cleaned_ids.append(str(run.id))
+
+    if cleaned_ids:
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "cleaned": len(cleaned_ids),
+        "run_ids": cleaned_ids,
+    }
+
