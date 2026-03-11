@@ -93,7 +93,7 @@ class PipelineStack(cdk.Stack):
             "HaikuInferenceProfile",
             inference_profile_name=f"pco-{deploy_env}-haiku-4-5",
             model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
-                copy_from=f"arn:aws:bedrock:us-east-2::foundation-model/{haiku_model_id}",
+                copy_from=f"arn:aws:bedrock:us-east-2::inference-profile/{haiku_model_id}",
             ),
             description=f"Claude Haiku 4.5 PCO compliance filtering-{deploy_env}",
             tags=[
@@ -109,7 +109,7 @@ class PipelineStack(cdk.Stack):
             "SonnetInferenceProfile",
             inference_profile_name=f"pco-{deploy_env}-sonnet-4-5",
             model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
-                copy_from=f"arn:aws:bedrock:us-east-2::foundation-model/{sonnet_model_id}",
+                copy_from=f"arn:aws:bedrock:us-east-2::inference-profile/{sonnet_model_id}",
             ),
             description=f"Claude Sonnet 4.5 PCO compliance analysis-{deploy_env}",
             tags=[
