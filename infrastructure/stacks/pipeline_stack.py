@@ -95,7 +95,7 @@ class PipelineStack(cdk.Stack):
             model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
                 copy_from=f"arn:aws:bedrock:us-east-2::foundation-model/{haiku_model_id}",
             ),
-            description=f"Claude Haiku 4.5 for PCO compliance filtering ({deploy_env})",
+            description=f"Claude Haiku 4.5 for PCO compliance filtering - {deploy_env}",
             tags=[
                 cdk.CfnTag(key="product", value="pco-compliance"),
                 cdk.CfnTag(key="environment", value=deploy_env),
@@ -111,7 +111,7 @@ class PipelineStack(cdk.Stack):
             model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
                 copy_from=f"arn:aws:bedrock:us-east-2::foundation-model/{sonnet_model_id}",
             ),
-            description=f"Claude Sonnet 4.5 for PCO compliance analysis ({deploy_env})",
+            description=f"Claude Sonnet 4.5 for PCO compliance analysis - {deploy_env}",
             tags=[
                 cdk.CfnTag(key="product", value="pco-compliance"),
                 cdk.CfnTag(key="environment", value=deploy_env),
