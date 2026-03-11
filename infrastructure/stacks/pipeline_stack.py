@@ -11,6 +11,7 @@ from aws_cdk import (
     aws_lambda_event_sources as lambda_event_sources,
     aws_secretsmanager as secretsmanager,
     aws_rds as rds,
+    aws_bedrock as bedrock,
     Duration,
 )
 from constructs import Construct
@@ -83,6 +84,42 @@ class PipelineStack(cdk.Stack):
             ),
         )
 
+        # ---- Bedrock Application Inference Profiles (for cost allocation tagging) ----
+        haiku_model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+        sonnet_model_id = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+        haiku_profile = bedrock.CfnApplicationInferenceProfile(
+            self,
+            "HaikuInferenceProfile",
+            inference_profile_name=f"pco-{deploy_env}-haiku-4-5",
+            model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
+                copy_from=f"arn:aws:bedrock:us-east-2::foundation-model/{haiku_model_id}",
+            ),
+            description=f"Claude Haiku 4.5 for PCO compliance filtering ({deploy_env})",
+            tags=[
+                cdk.CfnTag(key="product", value="pco-compliance"),
+                cdk.CfnTag(key="environment", value=deploy_env),
+                cdk.CfnTag(key="model", value="claude-haiku-4.5"),
+                cdk.CfnTag(key="purpose", value="regulation-filtering"),
+            ],
+        )
+
+        sonnet_profile = bedrock.CfnApplicationInferenceProfile(
+            self,
+            "SonnetInferenceProfile",
+            inference_profile_name=f"pco-{deploy_env}-sonnet-4-5",
+            model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
+                copy_from=f"arn:aws:bedrock:us-east-2::foundation-model/{sonnet_model_id}",
+            ),
+            description=f"Claude Sonnet 4.5 for PCO compliance analysis ({deploy_env})",
+            tags=[
+                cdk.CfnTag(key="product", value="pco-compliance"),
+                cdk.CfnTag(key="environment", value=deploy_env),
+                cdk.CfnTag(key="model", value="claude-sonnet-4.5"),
+                cdk.CfnTag(key="purpose", value="regulation-analysis"),
+            ],
+        )
+
         # Shared environment variables
         common_env = {
             "DB_SECRET_ARN": db_secret.secret_arn,
@@ -92,9 +129,9 @@ class PipelineStack(cdk.Stack):
             "COMMUNICATION_QUEUE_URL": self.communication_queue.queue_url,
             "APP_ENV": deploy_env,
             "LOG_LEVEL": "INFO",
-            # Bedrock model IDs — update these when new models are released
-            "BEDROCK_HAIKU_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            "BEDROCK_SONNET_MODEL_ID": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            # Bedrock: use Application Inference Profile ARNs for cost allocation tagging
+            "BEDROCK_HAIKU_MODEL_ID": haiku_profile.attr_inference_profile_arn,
+            "BEDROCK_SONNET_MODEL_ID": sonnet_profile.attr_inference_profile_arn,
             "MAX_CHUNKS_PER_RUN": "5",  # Process 5 chunks per invocation; trigger again to continue
         }
 
@@ -130,7 +167,7 @@ class PipelineStack(cdk.Stack):
         documents_bucket.grant_read_write(self.ingestion_lambda)
         self.analysis_queue.grant_send_messages(self.ingestion_lambda)
 
-        # Bedrock access for relevance scoring
+        # Bedrock access for relevance scoring (via inference profiles + foundation models)
         self.ingestion_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -138,6 +175,7 @@ class PipelineStack(cdk.Stack):
                 resources=[
                     "arn:aws:bedrock:*::foundation-model/*",
                     "arn:aws:bedrock:*:*:inference-profile/*",
+                    "arn:aws:bedrock:*:*:application-inference-profile/*",
                 ],
             )
         )
@@ -189,6 +227,7 @@ class PipelineStack(cdk.Stack):
                 resources=[
                     "arn:aws:bedrock:*::foundation-model/*",
                     "arn:aws:bedrock:*:*:inference-profile/*",
+                    "arn:aws:bedrock:*:*:application-inference-profile/*",
                 ],
             )
         )

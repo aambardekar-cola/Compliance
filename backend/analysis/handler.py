@@ -110,8 +110,16 @@ Output format: [{"title": "...", "description": "...", ...}, ...]
 SYSTEM_PROMPT = REGULATION_EXTRACTION_PROMPT
 
 
-async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: int = 4096) -> str:
-    """Helper to invoke AWS Bedrock Claude 3 models."""
+async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: int = 4096, purpose: str = "general") -> str:
+    """Helper to invoke AWS Bedrock Claude 3 models.
+    
+    Args:
+        model_id: Bedrock model ID or Application Inference Profile ARN.
+        system: System prompt for the model.
+        prompt: User prompt.
+        max_tokens: Maximum tokens in the response.
+        purpose: Cost tracking label (e.g. 'filtering', 'regulation-extraction', 'gap-analysis').
+    """
     body = {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": max_tokens,
@@ -124,6 +132,12 @@ async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: in
             }
         ]
     }
+    
+    await logger.info("Invoking Bedrock", {
+        "model_id": model_id.split("/")[-1] if "/" in model_id else model_id,
+        "purpose": purpose,
+        "max_tokens": max_tokens,
+    })
     
     response = boto_client.invoke_model(
         modelId=model_id,
@@ -143,7 +157,7 @@ async def filter_relevant_content(text: str) -> bool:
     filter_prompt = f"Does the following regulatory text contain any actionable compliance requirements, changes, or mandates that would affect a PACE organization? Respond with ONLY the word YES or NO. Do not explain.\n\n<TEXT>\n{sample}\n</TEXT>"
     filter_system = "You are a fast legal filter. You only respond with YES or NO."
     
-    filter_result = await invoke_bedrock(model_id=HAIKU_MODEL_ID, system=filter_system, prompt=filter_prompt, max_tokens=10)
+    filter_result = await invoke_bedrock(model_id=HAIKU_MODEL_ID, system=filter_system, prompt=filter_prompt, max_tokens=10, purpose="filtering")
     
     return "YES" in filter_result.upper()
 
@@ -342,7 +356,8 @@ async def process_scraped_content(content_id: UUID) -> bool:
                     model_id=SONNET_MODEL_ID,
                     system=REGULATION_EXTRACTION_PROMPT,
                     prompt=reg_prompt,
-                    max_tokens=8192
+                    max_tokens=8192,
+                    purpose="regulation-extraction",
                 )
                 reg_list = parse_json_response(raw_regs)
                 
@@ -469,7 +484,8 @@ async def process_scraped_content(content_id: UUID) -> bool:
                         model_id=SONNET_MODEL_ID,
                         system=GAP_IDENTIFICATION_PROMPT,
                         prompt=gap_prompt,
-                        max_tokens=4096
+                        max_tokens=4096,
+                        purpose="gap-analysis",
                     )
                     gap_list = parse_json_response(raw_gaps)
                     
