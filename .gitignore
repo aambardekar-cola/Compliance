@@ -1,3 +1,8 @@
 backend/layer/
+backend/venv/
 infrastructure/cdk-outputs.json
 cdk.out/
+__pycache__/
+*.pyc
+node_modules/
+.env
