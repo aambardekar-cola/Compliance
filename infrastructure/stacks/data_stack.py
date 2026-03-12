@@ -250,3 +250,19 @@ class DataStack(cdk.Stack):
         cdk.CfnOutput(
             self, "DatadogApiKeySecretArn", value=self.dd_api_key_secret.secret_arn
         )
+
+        # ---- Statsig Server Key Secret ----
+        # Populate with:
+        #   aws secretsmanager put-secret-value \
+        #     --secret-id pco-compliance/statsig-server-key \
+        #     --secret-string '<YOUR_STATSIG_SERVER_KEY>'
+        self.statsig_server_key_secret = secretsmanager.Secret(
+            self,
+            "StatsigServerKeySecret",
+            secret_name=f"pco-compliance/statsig-server-key-{deploy_env}",
+            description="Statsig server secret key for feature gates and configs",
+        )
+
+        cdk.CfnOutput(
+            self, "StatsigServerKeySecretArn", value=self.statsig_server_key_secret.secret_arn
+        )

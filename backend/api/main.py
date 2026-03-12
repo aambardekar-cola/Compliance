@@ -14,6 +14,7 @@ from mangum import Mangum
 
 from shared.config import get_settings
 from shared.db import close_db
+from shared import statsig_client
 from api.middleware.auth import AuthMiddleware
 from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin, notifications, system_config
 
@@ -33,12 +34,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ---- FastAPI App ----
+# Statsig — init at cold start to fetch feature gates + configs
+statsig_client.initialize()
+
+# Determine if API docs should be shown (Statsig gate overrides env check)
+_show_docs = statsig_client.check_gate("api_docs_enabled") or not get_settings().is_production
+
 app = FastAPI(
     title="PaceCareOnline Compliance Intelligence API",
     description="AI-powered compliance monitoring for PACE Market EHR",
     version="1.0.0",
-    docs_url="/api/docs" if not get_settings().is_production else None,
-    redoc_url="/api/redoc" if not get_settings().is_production else None,
+    docs_url="/api/docs" if _show_docs else None,
+    redoc_url="/api/redoc" if _show_docs else None,
 )
 
 # ---- Auth Middleware ----
@@ -84,6 +91,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     await close_db()
+    statsig_client.shutdown()
     logger.info("Shutting down PaceCareOnline Compliance API")
 
 

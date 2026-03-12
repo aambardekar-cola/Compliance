@@ -66,6 +66,7 @@ api_stack = ApiStack(
     log_level=log_level,
     descope_project_id=env_config.get("descope_project_id", ""),
     dd_api_key_secret=data_stack.dd_api_key_secret,
+    statsig_server_key_secret=data_stack.statsig_server_key_secret,
     description=f"[{deploy_env}] API Gateway + FastAPI Lambda",
 )
 api_stack.add_dependency(data_stack)

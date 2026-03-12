@@ -34,3 +34,6 @@ structlog>=24.4.0       # Structured logging
 
 # Observability
 ddtrace>=2.14.0         # Datadog APM tracing
+
+# Feature Flags & Configuration
+statsig>=0.55.0         # Statsig feature gates, configs, experiments

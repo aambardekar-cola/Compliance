@@ -29,6 +29,7 @@ class ApiStack(cdk.Stack):
         log_level: str = "INFO",
         descope_project_id: str = "",
         dd_api_key_secret: secretsmanager.ISecret = None,
+        statsig_server_key_secret: secretsmanager.ISecret = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -108,6 +109,9 @@ class ApiStack(cdk.Stack):
                 "APP_ENV": deploy_env,
                 "LOG_LEVEL": log_level,
                 "DESCOPE_PROJECT_ID": descope_project_id,
+                "STATSIG_SERVER_KEY_SECRET_ARN": (
+                    statsig_server_key_secret.secret_arn if statsig_server_key_secret else ""
+                ),
                 **dd_env,
             },
         )
@@ -119,6 +123,10 @@ class ApiStack(cdk.Stack):
         # Grant Datadog secret access
         if dd_api_key_secret:
             dd_api_key_secret.grant_read(self.api_lambda)
+
+        # Grant Statsig secret access
+        if statsig_server_key_secret:
+            statsig_server_key_secret.grant_read(self.api_lambda)
 
         # Bedrock permissions
         self.api_lambda.add_to_role_policy(

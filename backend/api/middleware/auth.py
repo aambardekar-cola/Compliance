@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from shared.auth import validate_token, CurrentUser
-from shared.config import get_settings
+from shared import statsig_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +38,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = auth_header[7:]  # Remove 'Bearer '
 
         # --- Demo Mode / Mock Token Support ---
-        # NEVER allow mock tokens in production!
-        settings = get_settings()
-        is_prod = settings.app_env in ("prod", "production")
-        
+        # Controlled by Statsig gate — defaults to OFF, NEVER on in production
+        mock_auth_enabled = statsig_client.check_gate("mock_auth_bypass")
+
         mock_users = {
             "mock-admin-token": CurrentUser(
                 user_id="mock-admin-123", email="admin@collabrios.com", name="Sarah Mitchell",
@@ -61,10 +60,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             ),
         }
 
-        if not is_prod and token in mock_users:
+        if mock_auth_enabled and token in mock_users:
             request.state.user = mock_users[token]
             return await call_next(request)
-        
+
         # --- Real Descope Auth ---
         try:
             user = validate_token(token)
