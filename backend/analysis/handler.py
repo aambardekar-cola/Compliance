@@ -28,6 +28,14 @@ from shared.logging import get_pipeline_logger
 
 logger = get_pipeline_logger("analysis")
 
+# Datadog APM — conditional import for custom spans
+_tracer = None
+if os.environ.get("DD_TRACE_ENABLED") == "true":
+    try:
+        from ddtrace import tracer as _tracer  # noqa: F811
+    except ImportError:
+        pass
+
 # Hybrid Bedrock Architecture: Haiku for filtering, Sonnet for deep extraction
 HAIKU_MODEL_ID = os.environ.get(
     "BEDROCK_HAIKU_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -138,13 +146,41 @@ async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: in
         "purpose": purpose,
         "max_tokens": max_tokens,
     })
-    
-    response = boto_client.invoke_model(
-        modelId=model_id,
-        body=json.dumps(body)
-    )
-    response_body = json.loads(response.get("body").read().decode("utf-8"))
-    return response_body.get("content", [])[0].get("text", "")
+
+    # Extract clean model name for tagging (works for both ARN and plain model IDs)
+    model_name = model_id.split("/")[-1] if "/" in model_id else model_id
+
+    span_ctx = _tracer.trace(
+        f"bedrock.{purpose.replace('-', '_')}",
+        service="pco-compliance-pipeline",
+        resource=model_name,
+    ) if _tracer else None
+
+    try:
+        response = boto_client.invoke_model(
+            modelId=model_id,
+            body=json.dumps(body)
+        )
+        response_body = json.loads(response.get("body").read().decode("utf-8"))
+        result_text = response_body.get("content", [])[0].get("text", "")
+
+        # Tag span with model details (auto-tracks model changes)
+        if span_ctx:
+            usage = response_body.get("usage", {})
+            span_ctx.set_tag("bedrock.model_id", model_name)
+            span_ctx.set_tag("bedrock.purpose", purpose)
+            span_ctx.set_tag("bedrock.max_tokens", max_tokens)
+            span_ctx.set_metric("bedrock.tokens_in", usage.get("input_tokens", 0))
+            span_ctx.set_metric("bedrock.tokens_out", usage.get("output_tokens", 0))
+
+        return result_text
+    except Exception as e:
+        if span_ctx:
+            span_ctx.set_exc_info(type(e), e, e.__traceback__)
+        raise
+    finally:
+        if span_ctx:
+            span_ctx.finish()
 
 
 async def filter_relevant_content(text: str) -> bool:
@@ -349,186 +385,208 @@ async def process_scraped_content(content_id: UUID) -> bool:
             for i in range(start_chunk, end_chunk):
                 chunk = chunks[i]
                 await logger.info(f"Chunk {i+1}/{total} ({len(chunk)} chars)")
-                
-                # --- STAGE 1: Extract Regulations from this chunk ---
-                reg_prompt = f"Extract all distinct regulatory requirements from the following text:\n\n<TEXT>\n{chunk}\n</TEXT>"
-                raw_regs = await invoke_bedrock(
-                    model_id=SONNET_MODEL_ID,
-                    system=REGULATION_EXTRACTION_PROMPT,
-                    prompt=reg_prompt,
-                    max_tokens=8192,
-                    purpose="regulation-extraction",
-                )
-                reg_list = parse_json_response(raw_regs)
-                
-                if not reg_list:
-                    await logger.info(f"Chunk {i+1}: no regulations found, skipping")
-                    content.chunks_processed = i + 1
-                    await session.commit()
-                    continue
-                
-                await logger.info(f"Chunk {i+1}: found {len(reg_list)} regulation(s)")
-                
-                chunk_regulations = []
-                for reg_dict in reg_list:
-                    if not isinstance(reg_dict, dict):
-                        continue
-                    
-                    title = str(reg_dict.get("title", ""))[:1000]
-                    if not title:
-                        continue
-                    
-                    cfr = str(reg_dict.get("cfr_citation", ""))[:200]
-                    doc_hash = hashlib.sha256(f"{cfr}|{title}".encode()).hexdigest()
-                    
-                    # Dedup: check by chunk hash first
-                    existing = await session.execute(
-                        select(Regulation).where(
-                            Regulation.document_chunk_hash == doc_hash
-                        )
+
+                # Wrap each chunk in a span for per-chunk latency tracking
+                chunk_span = _tracer.trace(
+                    "analysis.process_chunk",
+                    service="pco-compliance-pipeline",
+                ) if _tracer else None
+                if chunk_span:
+                    chunk_span.set_tag("chunk.index", i)
+                    chunk_span.set_tag("chunk.total", total)
+                    chunk_span.set_metric("chunk.content_length", len(chunk))
+
+                try:
+                    # --- STAGE 1: Extract Regulations from this chunk ---
+                    reg_prompt = f"Extract all distinct regulatory requirements from the following text:\n\n<TEXT>\n{chunk}\n</TEXT>"
+                    raw_regs = await invoke_bedrock(
+                        model_id=SONNET_MODEL_ID,
+                        system=REGULATION_EXTRACTION_PROMPT,
+                        prompt=reg_prompt,
+                        max_tokens=8192,
+                        purpose="regulation-extraction",
                     )
-                    existing_reg = existing.scalar_one_or_none()
+                    reg_list = parse_json_response(raw_regs)
                     
-                    if existing_reg:
-                        await logger.info(f"  Regulation already exists (hash): {title[:80]}")
-                        chunk_regulations.append(existing_reg)
+                    if not reg_list:
+                        await logger.info(f"Chunk {i+1}: no regulations found, skipping")
+                        content.chunks_processed = i + 1
+                        await session.commit()
                         continue
                     
-                    # Dedup: also check by (source, source_id) unique constraint
-                    if cfr:
-                        existing_by_src = await session.execute(
+                    await logger.info(f"Chunk {i+1}: found {len(reg_list)} regulation(s)")
+                    
+                    chunk_regulations = []
+                    for reg_dict in reg_list:
+                        if not isinstance(reg_dict, dict):
+                            continue
+                        
+                        title = str(reg_dict.get("title", ""))[:1000]
+                        if not title:
+                            continue
+                        
+                        cfr = str(reg_dict.get("cfr_citation", ""))[:200]
+                        doc_hash = hashlib.sha256(f"{cfr}|{title}".encode()).hexdigest()
+                        
+                        # Dedup: check by chunk hash first
+                        existing = await session.execute(
                             select(Regulation).where(
-                                Regulation.source == "federal_register",
-                                Regulation.source_id == cfr,
+                                Regulation.document_chunk_hash == doc_hash
                             )
                         )
-                        existing_src_reg = existing_by_src.scalar_one_or_none()
-                        if existing_src_reg:
-                            await logger.info(f"  Regulation already exists (source_id): {cfr}")
-                            chunk_regulations.append(existing_src_reg)
+                        existing_reg = existing.scalar_one_or_none()
+                        
+                        if existing_reg:
+                            await logger.info(f"  Regulation already exists (hash): {title[:80]}")
+                            chunk_regulations.append(existing_reg)
                             continue
-                    
-                    # Parse effective_date safely
-                    eff_date = None
-                    raw_date = reg_dict.get("effective_date")
-                    if raw_date:
-                        try:
-                            eff_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
-                        except (ValueError, TypeError):
-                            pass
-                    
-                    # Normalize affected_areas to canonical PCO modules
-                    raw_areas = reg_dict.get("affected_areas", [])
-                    if not isinstance(raw_areas, list):
-                        raw_areas = []
-                    affected_areas = [a for a in raw_areas if a in PCO_MODULES]
-                    
-                    try:
-                        new_reg = Regulation(
-                            scraped_content_id=content.id,
-                            source="federal_register",
-                            source_id=cfr or None,
-                            title=title,
-                            summary=str(reg_dict.get("summary", ""))[:5000],
-                            source_url=source_url,
-                            relevance_score=0.8,  # High relevance — passed Haiku filter
-                            affected_areas=affected_areas,
-                            key_requirements=reg_dict.get("key_requirements", []),
-                            status=safe_regulation_status(reg_dict.get("regulation_status")),
-                            program_area=safe_program_area(reg_dict.get("program_area")),
-                            effective_date=eff_date,
-                            document_type=str(reg_dict.get("document_type", "final_rule"))[:100],
-                            cfr_references=[cfr] if cfr else [],
-                            agencies=["CMS"],
-                            document_chunk_hash=doc_hash,
-                        )
-                        session.add(new_reg)
-                        await session.flush()  # Get the ID
-                        chunk_regulations.append(new_reg)
-                        await logger.info(f"  + Regulation saved: {title[:80]}")
-                    except Exception as flush_err:
-                        await session.rollback()
-                        await logger.error(f"  ! Regulation insert failed: {title[:80]}: {flush_err}")
-                        # Try to recover by fetching the existing regulation
+                        
+                        # Dedup: also check by (source, source_id) unique constraint
                         if cfr:
-                            fallback = await session.execute(
+                            existing_by_src = await session.execute(
                                 select(Regulation).where(
                                     Regulation.source == "federal_register",
                                     Regulation.source_id == cfr,
                                 )
                             )
-                            fallback_reg = fallback.scalar_one_or_none()
-                            if fallback_reg:
-                                chunk_regulations.append(fallback_reg)
-                                await logger.info(f"  ~ Recovered existing regulation: {cfr}")
-                
-                # --- STAGE 2: Identify Gaps per Regulation (with configurable triggers) ---
-                total_gaps = 0
-                for reg in chunk_regulations:
-                    # Check if this regulation qualifies for gap analysis
-                    run_gaps = await should_run_gap_analysis(reg)
-                    if not run_gaps:
-                        await logger.info(f"  ⏭ Skipping gap analysis for '{reg.title[:60]}' (status={reg.status.value}, not in trigger list)")
-                        continue
+                            existing_src_reg = existing_by_src.scalar_one_or_none()
+                            if existing_src_reg:
+                                await logger.info(f"  Regulation already exists (source_id): {cfr}")
+                                chunk_regulations.append(existing_src_reg)
+                                continue
+                        
+                        # Parse effective_date safely
+                        eff_date = None
+                        raw_date = reg_dict.get("effective_date")
+                        if raw_date:
+                            try:
+                                eff_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        # Normalize affected_areas to canonical PCO modules
+                        raw_areas = reg_dict.get("affected_areas", [])
+                        if not isinstance(raw_areas, list):
+                            raw_areas = []
+                        affected_areas = [a for a in raw_areas if a in PCO_MODULES]
+                        
+                        try:
+                            new_reg = Regulation(
+                                scraped_content_id=content.id,
+                                source="federal_register",
+                                source_id=cfr or None,
+                                title=title,
+                                summary=str(reg_dict.get("summary", ""))[:5000],
+                                source_url=source_url,
+                                relevance_score=0.8,  # High relevance — passed Haiku filter
+                                affected_areas=affected_areas,
+                                key_requirements=reg_dict.get("key_requirements", []),
+                                status=safe_regulation_status(reg_dict.get("regulation_status")),
+                                program_area=safe_program_area(reg_dict.get("program_area")),
+                                effective_date=eff_date,
+                                document_type=str(reg_dict.get("document_type", "final_rule"))[:100],
+                                cfr_references=[cfr] if cfr else [],
+                                agencies=["CMS"],
+                                document_chunk_hash=doc_hash,
+                            )
+                            session.add(new_reg)
+                            await session.flush()  # Get the ID
+                            chunk_regulations.append(new_reg)
+                            await logger.info(f"  + Regulation saved: {title[:80]}")
+                        except Exception as flush_err:
+                            await session.rollback()
+                            await logger.error(f"  ! Regulation insert failed: {title[:80]}: {flush_err}")
+                            # Try to recover by fetching the existing regulation
+                            if cfr:
+                                fallback = await session.execute(
+                                    select(Regulation).where(
+                                        Regulation.source == "federal_register",
+                                        Regulation.source_id == cfr,
+                                    )
+                                )
+                                fallback_reg = fallback.scalar_one_or_none()
+                                if fallback_reg:
+                                    chunk_regulations.append(fallback_reg)
+                                    await logger.info(f"  ~ Recovered existing regulation: {cfr}")
                     
-                    gap_prompt = (
-                        f"Given this regulatory requirement, identify compliance gaps:\n\n"
-                        f"REGULATION: {reg.title}\n"
-                        f"SUMMARY: {reg.summary or 'N/A'}\n"
-                        f"CFR: {reg.source_id or 'N/A'}\n"
-                        f"AFFECTED AREAS: {', '.join(reg.affected_areas or [])}\n"
-                        f"KEY REQUIREMENTS: {json.dumps(reg.key_requirements or [])}\n"
-                    )
-                    
-                    raw_gaps = await invoke_bedrock(
-                        model_id=SONNET_MODEL_ID,
-                        system=GAP_IDENTIFICATION_PROMPT,
-                        prompt=gap_prompt,
-                        max_tokens=4096,
-                        purpose="gap-analysis",
-                    )
-                    gap_list = parse_json_response(raw_gaps)
-                    
-                    for gap_dict in gap_list:
-                        if not isinstance(gap_dict, dict):
+                    # --- STAGE 2: Identify Gaps per Regulation (with configurable triggers) ---
+                    total_gaps = 0
+                    for reg in chunk_regulations:
+                        # Check if this regulation qualifies for gap analysis
+                        run_gaps = await should_run_gap_analysis(reg)
+                        if not run_gaps:
+                            await logger.info(f"  ⏭ Skipping gap analysis for '{reg.title[:60]}' (status={reg.status.value}, not in trigger list)")
                             continue
                         
-                        gap_title = str(gap_dict.get("title", ""))[:500]
-                        if not gap_title:
-                            continue
-                        
-                        new_gap = ComplianceGap(
-                            scraped_content_id=content.id,
-                            regulation_id=reg.id,
-                            title=gap_title,
-                            description=str(gap_dict.get("description", "")),
-                            severity=safe_severity(gap_dict.get("severity")),
-                            status=GapStatus.IDENTIFIED,
-                            affected_modules=gap_dict.get("affected_modules", []),
-                            affected_layer=safe_affected_layer(gap_dict.get("affected_layer")),
-                            is_new_requirement=bool(gap_dict.get("is_new_requirement", False)),
+                        gap_prompt = (
+                            f"Given this regulatory requirement, identify compliance gaps:\n\n"
+                            f"REGULATION: {reg.title}\n"
+                            f"SUMMARY: {reg.summary or 'N/A'}\n"
+                            f"CFR: {reg.source_id or 'N/A'}\n"
+                            f"AFFECTED AREAS: {', '.join(reg.affected_areas or [])}\n"
+                            f"KEY REQUIREMENTS: {json.dumps(reg.key_requirements or [])}\n"
                         )
-                        session.add(new_gap)
-                        total_gaps += 1
+                        
+                        raw_gaps = await invoke_bedrock(
+                            model_id=SONNET_MODEL_ID,
+                            system=GAP_IDENTIFICATION_PROMPT,
+                            prompt=gap_prompt,
+                            max_tokens=4096,
+                            purpose="gap-analysis",
+                        )
+                        gap_list = parse_json_response(raw_gaps)
+                        
+                        for gap_dict in gap_list:
+                            if not isinstance(gap_dict, dict):
+                                continue
+                            
+                            gap_title = str(gap_dict.get("title", ""))[:500]
+                            if not gap_title:
+                                continue
+                            
+                            new_gap = ComplianceGap(
+                                scraped_content_id=content.id,
+                                regulation_id=reg.id,
+                                title=gap_title,
+                                description=str(gap_dict.get("description", "")),
+                                severity=safe_severity(gap_dict.get("severity")),
+                                status=GapStatus.IDENTIFIED,
+                                affected_modules=gap_dict.get("affected_modules", []),
+                                affected_layer=safe_affected_layer(gap_dict.get("affected_layer")),
+                                is_new_requirement=bool(gap_dict.get("is_new_requirement", False)),
+                            )
+                            session.add(new_gap)
+                            total_gaps += 1
+                        
+                    if total_gaps > 0:
+                        await logger.info(f"Chunk {i+1}: {len(chunk_regulations)} regs → {total_gaps} gaps saved")
                     
-                if total_gaps > 0:
-                    await logger.info(f"Chunk {i+1}: {len(chunk_regulations)} regs → {total_gaps} gaps saved")
-                
-                # Update progress and commit after each chunk
-                try:
-                    content.chunks_processed = i + 1
-                    await session.commit()
-                except Exception as commit_err:
-                    await session.rollback()
-                    await logger.error(f"Chunk {i+1} commit failed: {commit_err}")
-                    # Re-fetch content so we can continue with next chunk
-                    result = await session.execute(
-                        select(ScrapedContent).where(ScrapedContent.id == content_id)
-                    )
-                    content = result.scalar_one_or_none()
-                    if not content:
-                        await logger.error(f"Lost ScrapedContent {content_id} after rollback")
-                        return False
+                    # Update progress and commit after each chunk
+                    try:
+                        content.chunks_processed = i + 1
+                        await session.commit()
+                    except Exception as commit_err:
+                        await session.rollback()
+                        await logger.error(f"Chunk {i+1} commit failed: {commit_err}")
+                        # Re-fetch content so we can continue with next chunk
+                        result = await session.execute(
+                            select(ScrapedContent).where(ScrapedContent.id == content_id)
+                        )
+                        content = result.scalar_one_or_none()
+                        if not content:
+                            await logger.error(f"Lost ScrapedContent {content_id} after rollback")
+                            return False
+
+                    if chunk_span:
+                        chunk_span.set_metric("chunk.regulations_found", len(chunk_regulations))
+                        chunk_span.set_metric("chunk.gaps_found", total_gaps)
+                except Exception as chunk_err:
+                    if chunk_span:
+                        chunk_span.set_exc_info(type(chunk_err), chunk_err, chunk_err.__traceback__)
+                    raise
+                finally:
+                    if chunk_span:
+                        chunk_span.finish()
             
             # Mark as fully processed only if ALL chunks are done
             if content.chunks_processed >= total:
@@ -744,4 +802,23 @@ async def run_analysis(event: Dict[str, Any]) -> Dict[str, Any]:
 
 def handler(event, context):
     """AWS Lambda SQS entry point."""
-    return asyncio.get_event_loop().run_until_complete(run_analysis(event))
+    # Wrap the entire handler in an analysis.run span
+    run_span = _tracer.trace(
+        "analysis.run",
+        service="pco-compliance-pipeline",
+        resource="sqs_analysis",
+    ) if _tracer else None
+
+    try:
+        result = asyncio.get_event_loop().run_until_complete(run_analysis(event))
+        if run_span:
+            run_span.set_tag("analysis.status", "success")
+        return result
+    except Exception as e:
+        if run_span:
+            run_span.set_exc_info(type(e), e, e.__traceback__)
+            run_span.set_tag("analysis.status", "error")
+        raise
+    finally:
+        if run_span:
+            run_span.finish()

@@ -30,6 +30,7 @@ class PipelineStack(cdk.Stack):
         documents_bucket: s3.IBucket,
         lambda_security_group: ec2.ISecurityGroup,
         deploy_env: str = "dev",
+        dd_api_key_secret: secretsmanager.ISecret = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -51,6 +52,16 @@ class PipelineStack(cdk.Stack):
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
             compatible_architectures=[lambda_.Architecture.ARM_64],
             description="Python dependencies for pipeline Lambdas",
+        )
+
+        # ---- Datadog APM Layers ----
+        dd_extension_layer = lambda_.LayerVersion.from_layer_version_arn(
+            self, "DatadogExtension",
+            f"arn:aws:lambda:{cdk.Stack.of(self).region}:464622532012:layer:Datadog-Extension-ARM:93",
+        )
+        dd_python_layer = lambda_.LayerVersion.from_layer_version_arn(
+            self, "DatadogPython",
+            f"arn:aws:lambda:{cdk.Stack.of(self).region}:464622532012:layer:Datadog-Python312-ARM:123",
         )
 
         # ---- SQS Queues ----
@@ -121,6 +132,20 @@ class PipelineStack(cdk.Stack):
         )
 
         # Shared environment variables
+        dd_env = {}
+        if dd_api_key_secret:
+            dd_env = {
+                "DD_API_KEY_SECRET_ARN": dd_api_key_secret.secret_arn,
+                "DD_SITE": "datadoghq.com",
+                "DD_ENV": deploy_env,
+                "DD_SERVICE": "pco-compliance-pipeline",
+                "DD_TRACE_ENABLED": "true",
+                "DD_SERVERLESS_LOGS_ENABLED": "true",
+                "DD_CAPTURE_LAMBDA_PAYLOAD": "false",
+                "DD_TRACE_IGNORE_RESOURCES": "/health",
+                "DD_TRACE_SAMPLE_RATE": "0.1" if deploy_env in ("dev", "staging") else "1.0",
+            }
+
         common_env = {
             "DB_SECRET_ARN": db_secret.secret_arn,
             "DB_PROXY_ENDPOINT": db_proxy.endpoint,
@@ -133,7 +158,13 @@ class PipelineStack(cdk.Stack):
             "BEDROCK_HAIKU_MODEL_ID": haiku_profile.attr_inference_profile_arn,
             "BEDROCK_SONNET_MODEL_ID": sonnet_profile.attr_inference_profile_arn,
             "MAX_CHUNKS_PER_RUN": "5",  # Process 5 chunks per invocation; trigger again to continue
+            **dd_env,
         }
+
+        # Datadog layers for all pipeline Lambdas
+        pipeline_layers = [deps_layer]
+        if dd_api_key_secret:
+            pipeline_layers.extend([dd_extension_layer, dd_python_layer])
 
         # ---- Ingestion Lambda ----
         self.ingestion_lambda = lambda_.Function(
@@ -158,7 +189,7 @@ class PipelineStack(cdk.Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
             security_groups=[lambda_sg, lambda_security_group],
-            layers=[deps_layer],
+            layers=pipeline_layers,
             environment=common_env,
         )
 
@@ -179,6 +210,10 @@ class PipelineStack(cdk.Stack):
                 ],
             )
         )
+
+        # Grant Datadog secret access
+        if dd_api_key_secret:
+            dd_api_key_secret.grant_read(self.ingestion_lambda)
 
         # ---- Analysis Lambda ----
         self.analysis_lambda = lambda_.Function(
@@ -203,7 +238,7 @@ class PipelineStack(cdk.Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
             security_groups=[lambda_sg, lambda_security_group],
-            layers=[deps_layer],
+            layers=pipeline_layers,
             environment=common_env,
         )
 
@@ -231,6 +266,10 @@ class PipelineStack(cdk.Stack):
                 ],
             )
         )
+
+        # Grant Datadog secret access
+        if dd_api_key_secret:
+            dd_api_key_secret.grant_read(self.analysis_lambda)
 
         # AWS Marketplace permissions for auto-enabling newer Bedrock models
         # (Haiku 4.5, Sonnet 4.5 are served via Marketplace)
@@ -268,13 +307,17 @@ class PipelineStack(cdk.Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
             security_groups=[lambda_sg, lambda_security_group],
-            layers=[deps_layer],
+            layers=pipeline_layers,
             environment=common_env,
         )
 
         db_secret.grant_read(self.scraper_lambda)
         documents_bucket.grant_read_write(self.scraper_lambda)
         self.analysis_queue.grant_send_messages(self.scraper_lambda)
+
+        # Grant Datadog secret access
+        if dd_api_key_secret:
+            dd_api_key_secret.grant_read(self.scraper_lambda)
 
         # ---- EventBridge: Daily Scraper Schedule ----
         events.Rule(

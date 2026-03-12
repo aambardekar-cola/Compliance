@@ -31,3 +31,6 @@ lxml>=5.0.0             # XML parser for eCFR API
 # Utilities
 python-dateutil>=2.9.0
 structlog>=24.4.0       # Structured logging
+
+# Observability
+ddtrace>=2.14.0         # Datadog APM tracing

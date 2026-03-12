@@ -234,3 +234,19 @@ class DataStack(cdk.Stack):
             self, "MigrationLambdaArn", value=migration_lambda.function_arn
         )
 
+        # ---- Datadog API Key Secret ----
+        # Stores the DD API key for Lambda extension telemetry forwarding.
+        # After first deploy, update the secret value in AWS Console:
+        #   aws secretsmanager put-secret-value \
+        #     --secret-id pco-compliance/datadog-api-key \
+        #     --secret-string '{"api_key":"<YOUR_DD_API_KEY>"}'
+        self.dd_api_key_secret = secretsmanager.Secret(
+            self,
+            "DatadogApiKeySecret",
+            secret_name=f"pco-compliance/datadog-api-key-{deploy_env}",
+            description="Datadog API key for Lambda APM instrumentation",
+        )
+
+        cdk.CfnOutput(
+            self, "DatadogApiKeySecretArn", value=self.dd_api_key_secret.secret_arn
+        )

@@ -28,6 +28,7 @@ class ApiStack(cdk.Stack):
         deploy_env: str = "dev",
         log_level: str = "INFO",
         descope_project_id: str = "",
+        dd_api_key_secret: secretsmanager.ISecret = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -50,6 +51,31 @@ class ApiStack(cdk.Stack):
             compatible_architectures=[lambda_.Architecture.ARM_64],
             description="Python dependencies for backend Lambdas",
         )
+
+        # ---- Datadog APM Layers ----
+        api_layers = [deps_layer]
+        dd_env = {}
+        if dd_api_key_secret:
+            dd_extension_layer = lambda_.LayerVersion.from_layer_version_arn(
+                self, "DatadogExtension",
+                f"arn:aws:lambda:{cdk.Stack.of(self).region}:464622532012:layer:Datadog-Extension-ARM:93",
+            )
+            dd_python_layer = lambda_.LayerVersion.from_layer_version_arn(
+                self, "DatadogPython",
+                f"arn:aws:lambda:{cdk.Stack.of(self).region}:464622532012:layer:Datadog-Python312-ARM:123",
+            )
+            api_layers.extend([dd_extension_layer, dd_python_layer])
+            dd_env = {
+                "DD_API_KEY_SECRET_ARN": dd_api_key_secret.secret_arn,
+                "DD_SITE": "datadoghq.com",
+                "DD_ENV": deploy_env,
+                "DD_SERVICE": "pco-compliance-api",
+                "DD_TRACE_ENABLED": "true",
+                "DD_SERVERLESS_LOGS_ENABLED": "true",
+                "DD_CAPTURE_LAMBDA_PAYLOAD": "false",
+                "DD_TRACE_IGNORE_RESOURCES": "/health",
+                "DD_TRACE_SAMPLE_RATE": "0.1" if deploy_env in ("dev", "staging") else "1.0",
+            }
 
         # ---- FastAPI Lambda ----
         self.api_lambda = lambda_.Function(
@@ -74,7 +100,7 @@ class ApiStack(cdk.Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
             security_groups=[lambda_sg, lambda_security_group],
-            layers=[deps_layer],
+            layers=api_layers,
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
                 "DB_PROXY_ENDPOINT": db_proxy.endpoint,
@@ -82,12 +108,17 @@ class ApiStack(cdk.Stack):
                 "APP_ENV": deploy_env,
                 "LOG_LEVEL": log_level,
                 "DESCOPE_PROJECT_ID": descope_project_id,
+                **dd_env,
             },
         )
 
         # Grant permissions
         db_secret.grant_read(self.api_lambda)
         documents_bucket.grant_read_write(self.api_lambda)
+
+        # Grant Datadog secret access
+        if dd_api_key_secret:
+            dd_api_key_secret.grant_read(self.api_lambda)
 
         # Bedrock permissions
         self.api_lambda.add_to_role_policy(

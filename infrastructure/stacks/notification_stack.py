@@ -23,6 +23,7 @@ class NotificationStack(cdk.Stack):
         db_proxy: rds.IDatabaseProxy,
         lambda_security_group: ec2.ISecurityGroup,
         deploy_env: str = "dev",
+        dd_api_key_secret: secretsmanager.ISecret = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -45,6 +46,30 @@ class NotificationStack(cdk.Stack):
             compatible_architectures=[lambda_.Architecture.ARM_64],
             description="Python dependencies for notification Lambdas",
         )
+
+        # ---- Datadog APM Layers ----
+        notif_layers = [deps_layer]
+        dd_env = {}
+        if dd_api_key_secret:
+            dd_extension_layer = lambda_.LayerVersion.from_layer_version_arn(
+                self, "DatadogExtension",
+                f"arn:aws:lambda:{cdk.Stack.of(self).region}:464622532012:layer:Datadog-Extension-ARM:93",
+            )
+            dd_python_layer = lambda_.LayerVersion.from_layer_version_arn(
+                self, "DatadogPython",
+                f"arn:aws:lambda:{cdk.Stack.of(self).region}:464622532012:layer:Datadog-Python312-ARM:123",
+            )
+            notif_layers.extend([dd_extension_layer, dd_python_layer])
+            dd_env = {
+                "DD_API_KEY_SECRET_ARN": dd_api_key_secret.secret_arn,
+                "DD_SITE": "datadoghq.com",
+                "DD_ENV": deploy_env,
+                "DD_SERVICE": "pco-compliance-notifications",
+                "DD_TRACE_ENABLED": "true",
+                "DD_SERVERLESS_LOGS_ENABLED": "true",
+                "DD_CAPTURE_LAMBDA_PAYLOAD": "false",
+                "DD_TRACE_SAMPLE_RATE": "0.1" if deploy_env in ("dev", "staging") else "1.0",
+            }
 
         # ---- Communication Generator Lambda ----
         self.comm_lambda = lambda_.Function(
@@ -69,18 +94,21 @@ class NotificationStack(cdk.Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
             security_groups=[lambda_sg, lambda_security_group],
-            layers=[deps_layer],
+            layers=notif_layers,
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
                 "DB_PROXY_ENDPOINT": db_proxy.endpoint,
                 "APP_ENV": deploy_env,
                 "SES_FROM_EMAIL": "compliance@collabrios.com",
                 "LOG_LEVEL": "INFO",
+                **dd_env,
             },
         )
 
         # Grant permissions
         db_secret.grant_read(self.comm_lambda)
+        if dd_api_key_secret:
+            dd_api_key_secret.grant_read(self.comm_lambda)
 
         # SES send permissions
         self.comm_lambda.add_to_role_policy(
@@ -127,17 +155,20 @@ class NotificationStack(cdk.Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
             ),
             security_groups=[lambda_sg, lambda_security_group],
-            layers=[deps_layer],
+            layers=notif_layers,
             environment={
                 "DB_SECRET_ARN": db_secret.secret_arn,
                 "DB_PROXY_ENDPOINT": db_proxy.endpoint,
                 "APP_ENV": deploy_env,
                 "SES_FROM_EMAIL": "compliance@collabrios.com",
                 "LOG_LEVEL": "INFO",
+                **dd_env,
             },
         )
 
         db_secret.grant_read(self.reporting_lambda)
+        if dd_api_key_secret:
+            dd_api_key_secret.grant_read(self.reporting_lambda)
 
         self.reporting_lambda.add_to_role_policy(
             iam.PolicyStatement(

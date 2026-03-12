@@ -1,5 +1,11 @@
 """FastAPI application entry point with Mangum handler for AWS Lambda."""
 import logging
+import os
+
+# Datadog APM — auto-instrument FastAPI, SQLAlchemy, httpx at import time
+if os.environ.get("DD_TRACE_ENABLED") == "true":
+    from ddtrace import patch_all
+    patch_all()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

@@ -65,6 +65,7 @@ api_stack = ApiStack(
     deploy_env=deploy_env,
     log_level=log_level,
     descope_project_id=env_config.get("descope_project_id", ""),
+    dd_api_key_secret=data_stack.dd_api_key_secret,
     description=f"[{deploy_env}] API Gateway + FastAPI Lambda",
 )
 api_stack.add_dependency(data_stack)
@@ -80,6 +81,7 @@ pipeline_stack = PipelineStack(
     documents_bucket=data_stack.documents_bucket,
     lambda_security_group=data_stack.lambda_security_group,
     deploy_env=deploy_env,
+    dd_api_key_secret=data_stack.dd_api_key_secret,
     description=f"[{deploy_env}] Regulatory ingestion and analysis pipeline",
 )
 pipeline_stack.add_dependency(data_stack)
@@ -101,6 +103,7 @@ notification_stack = NotificationStack(
     db_proxy=data_stack.db_proxy,
     lambda_security_group=data_stack.lambda_security_group,
     deploy_env=deploy_env,
+    dd_api_key_secret=data_stack.dd_api_key_secret,
     description=f"[{deploy_env}] SES email delivery and communication Lambdas",
 )
 notification_stack.add_dependency(data_stack)
