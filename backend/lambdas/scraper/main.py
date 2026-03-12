@@ -20,6 +20,14 @@ from shared.logging import get_pipeline_logger
 
 logger = get_pipeline_logger("scraper")
 
+# Datadog APM — conditional import for custom spans
+_tracer = None
+if os.environ.get("DD_TRACE_ENABLED") == "true":
+    try:
+        from ddtrace import tracer as _tracer  # noqa: F811
+    except ImportError:
+        pass
+
 # Browser-like UA — many .gov sites block simple bot identifiers
 SCRAPER_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -32,8 +40,16 @@ SCRAPER_HEADERS = {
 }
 
 
-async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
+async def scrape_url(client: httpx.AsyncClient, url: str, url_name: str = "") -> str:
     """Fetch structured JSON/XML for known Gov APIs, else fallback to HTML."""
+    span = _tracer.trace(
+        "scraper.fetch_url",
+        service="pco-compliance-pipeline",
+        resource=url_name or url[:80],
+    ) if _tracer else None
+    if span:
+        span.set_tag("scraper.url", url)
+        span.set_tag("scraper.url_name", url_name)
     try:
         # Federal Register: Extract Document ID and use API
         if "federalregister.gov" in url:
@@ -82,10 +98,17 @@ async def scrape_url(client: httpx.AsyncClient, url: str) -> str:
             element.extract()
             
         text = soup.get_text(separator=" ", strip=True)
+        if span:
+            span.set_metric("scraper.content_bytes", len(text))
         return text
     except Exception as e:
+        if span:
+            span.set_exc_info(type(e), e, e.__traceback__)
         logger.error(f"Failed to scrape {url}: {e}")
         return ""
+    finally:
+        if span:
+            span.finish()
 
 
 async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -133,7 +156,7 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
                 # roll back all successfully scraped content.
                 try:
                     await logger.info(f"Scraping: {rule_url['name']}", {"url": rule_url["url"], "id": str(rule_url["id"])})
-                    text_content = await scrape_url(client, rule_url["url"])
+                    text_content = await scrape_url(client, rule_url["url"], url_name=rule_url["name"])
                     
                     if not text_content:
                         await logger.error(f"Failed to scrape {rule_url['name']}: No content returned", {"url": rule_url["url"]})
@@ -157,7 +180,8 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
                         )
                         last_scrape = recent_scrape.scalar_one_or_none()
                         
-                        if not last_scrape or last_scrape.content_hash != content_hash:
+                        content_changed = not last_scrape or last_scrape.content_hash != content_hash
+                        if content_changed:
                             await logger.info(f"New or updated content detected for '{rule_url['name']}'")
                             new_content = ScrapedContent(
                                 url_id=rule_url["id"],
@@ -259,5 +283,28 @@ async def run_scraper(event: Dict[str, Any] = None) -> Dict[str, Any]:
 
 def handler(event, context):
     """AWS Lambda entry point."""
-    return asyncio.get_event_loop().run_until_complete(run_scraper(event))
+    run_span = _tracer.trace(
+        "scraper.run",
+        service="pco-compliance-pipeline",
+        resource="scheduled_scrape",
+    ) if _tracer else None
+
+    try:
+        result = asyncio.get_event_loop().run_until_complete(run_scraper(event))
+        if run_span:
+            import json as _json
+            body = _json.loads(result.get("body", "{}"))
+            run_span.set_tag("scraper.status", "success")
+            run_span.set_metric("scraper.urls_processed", body.get("urls_processed", 0))
+            run_span.set_metric("scraper.updates_found", body.get("updates_found", 0))
+            run_span.set_metric("scraper.errors", body.get("errors", 0))
+        return result
+    except Exception as e:
+        if run_span:
+            run_span.set_exc_info(type(e), e, e.__traceback__)
+            run_span.set_tag("scraper.status", "error")
+        raise
+    finally:
+        if run_span:
+            run_span.finish()
 

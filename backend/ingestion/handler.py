@@ -14,8 +14,18 @@ from ingestion.sources.federal_register import FederalRegisterSource
 from ingestion.sources.cms_gov import CMSGovSource
 from ingestion.relevance import score_relevance
 
+import os
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Datadog APM — conditional import for custom spans
+_tracer = None
+if os.environ.get("DD_TRACE_ENABLED") == "true":
+    try:
+        from ddtrace import tracer as _tracer  # noqa: F811
+    except ImportError:
+        pass
 
 # Minimum relevance score to keep a regulation
 RELEVANCE_THRESHOLD = 0.3
@@ -34,12 +44,24 @@ async def run_ingestion(event: dict = None):
 
     all_regulations = []
     for source in sources:
+        src_span = _tracer.trace(
+            "ingestion.fetch_source",
+            service="pco-compliance-pipeline",
+            resource=source.source_name,
+        ) if _tracer else None
         try:
             regs = await source.fetch_latest()
             all_regulations.extend(regs)
             logger.info(f"Source '{source.source_name}' returned {len(regs)} documents")
+            if src_span:
+                src_span.set_metric("ingestion.documents_found", len(regs))
         except Exception as e:
             logger.error(f"Source '{source.source_name}' failed: {e}")
+            if src_span:
+                src_span.set_exc_info(type(e), e, e.__traceback__)
+        finally:
+            if src_span:
+                src_span.finish()
 
     if not all_regulations:
         logger.info("No new regulations found")
@@ -62,8 +84,24 @@ async def run_ingestion(event: dict = None):
                 existing_reg = existing.scalar_one_or_none()
 
                 # Score relevance using LLM
-                analysis = await score_relevance(raw_reg)
-                relevance_score = analysis.get("relevance_score", 0.0)
+                rel_span = _tracer.trace(
+                    "bedrock.score_relevance",
+                    service="pco-compliance-pipeline",
+                    resource=raw_reg.title[:80] if raw_reg.title else "unknown",
+                ) if _tracer else None
+                try:
+                    analysis = await score_relevance(raw_reg)
+                    relevance_score = analysis.get("relevance_score", 0.0)
+                    if rel_span:
+                        rel_span.set_metric("ingestion.relevance_score", relevance_score)
+                        rel_span.set_tag("ingestion.source", raw_reg.source)
+                except Exception as rel_err:
+                    if rel_span:
+                        rel_span.set_exc_info(type(rel_err), rel_err, rel_err.__traceback__)
+                    raise
+                finally:
+                    if rel_span:
+                        rel_span.finish()
 
                 # Skip low-relevance regulations
                 if relevance_score < RELEVANCE_THRESHOLD:
@@ -162,4 +200,27 @@ async def _queue_for_analysis(queue_url: str, regulation_id: str, title: str):
 
 def handler(event, context):
     """AWS Lambda entry point."""
-    return asyncio.get_event_loop().run_until_complete(run_ingestion(event))
+    run_span = _tracer.trace(
+        "ingestion.run",
+        service="pco-compliance-pipeline",
+        resource="scheduled_ingestion",
+    ) if _tracer else None
+
+    try:
+        result = asyncio.get_event_loop().run_until_complete(run_ingestion(event))
+        if run_span:
+            import json as _json
+            body = _json.loads(result.get("body", "{}"))
+            run_span.set_tag("ingestion.status", "success")
+            run_span.set_metric("ingestion.fetched", body.get("fetched", 0))
+            run_span.set_metric("ingestion.new", body.get("new", 0))
+            run_span.set_metric("ingestion.updated", body.get("updated", 0))
+        return result
+    except Exception as e:
+        if run_span:
+            run_span.set_exc_info(type(e), e, e.__traceback__)
+            run_span.set_tag("ingestion.status", "error")
+        raise
+    finally:
+        if run_span:
+            run_span.finish()

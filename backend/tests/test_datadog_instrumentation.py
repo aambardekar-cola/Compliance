@@ -6,11 +6,10 @@ Validates that:
 3. Span tags include expected Bedrock metadata
 4. Setup script dry-run produces valid definitions
 """
-import json
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch
 
 
 class TestDatadogConditionalImport(unittest.TestCase):
