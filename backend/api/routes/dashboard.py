@@ -10,6 +10,7 @@ from shared.models import (
     Regulation, ComplianceGap, Communication,
     RegulationStatus, GapSeverity, GapStatus, CommunicationStatus,
 )
+from shared import statsig_client
 from api.middleware.auth import get_current_user
 
 router = APIRouter()
@@ -23,6 +24,12 @@ async def get_dashboard(
     """Get aggregated compliance dashboard metrics."""
     user = get_current_user(request)
 
+    # Dashboard config — runtime-tunable via Statsig
+    _dash = statsig_client.get_config("dashboard")
+    relevance_threshold = _dash.get("relevance_threshold", 0.5)
+    deadlines_window = _dash.get("deadlines_window_days", 90)
+    deadlines_limit = _dash.get("deadlines_limit", 10)
+
     # ---- Regulation Stats ----
     reg_query = select(
         func.count(Regulation.id).label("total"),
@@ -31,7 +38,7 @@ async def get_dashboard(
         func.count(case((Regulation.status == RegulationStatus.FINAL_RULE, 1))).label("final_rule"),
         func.count(case((Regulation.status == RegulationStatus.EFFECTIVE, 1))).label("effective"),
         func.avg(Regulation.relevance_score).label("avg_relevance"),
-    ).where(Regulation.relevance_score >= 0.5)
+    ).where(Regulation.relevance_score >= relevance_threshold)
 
     reg_result = await db.execute(reg_query)
     reg_stats = reg_result.one()
@@ -76,11 +83,11 @@ async def get_dashboard(
         select(Regulation.id, Regulation.title, Regulation.effective_date, Regulation.status)
         .where(
             Regulation.effective_date >= today,
-            Regulation.effective_date <= today + timedelta(days=90),
-            Regulation.relevance_score >= 0.5,
+            Regulation.effective_date <= today + timedelta(days=deadlines_window),
+            Regulation.relevance_score >= relevance_threshold,
         )
         .order_by(Regulation.effective_date)
-        .limit(10)
+        .limit(deadlines_limit)
     )
     upcoming_result = await db.execute(upcoming_query)
     upcoming_deadlines = [

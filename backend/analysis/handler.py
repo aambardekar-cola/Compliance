@@ -25,6 +25,7 @@ from shared.models import (
     AdminNotification, NotificationType,
 )
 from shared.logging import get_pipeline_logger
+from shared import statsig_client
 
 logger = get_pipeline_logger("analysis")
 
@@ -36,22 +37,26 @@ if os.environ.get("DD_TRACE_ENABLED") == "true":
     except ImportError:
         pass
 
-# Hybrid Bedrock Architecture: Haiku for filtering, Sonnet for deep extraction
+# AI model config — runtime-tunable via Statsig
+_ai = statsig_client.get_config("ai_models")
 HAIKU_MODEL_ID = os.environ.get(
-    "BEDROCK_HAIKU_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    "BEDROCK_HAIKU_MODEL_ID", _ai.get("haiku_model_id", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 )
 SONNET_MODEL_ID = os.environ.get(
-    "BEDROCK_SONNET_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    "BEDROCK_SONNET_MODEL_ID", _ai.get("sonnet_model_id", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 )
 boto_client = boto3.client(
     "bedrock-runtime",
-    config=BotoConfig(read_timeout=300, retries={"max_attempts": 2})
+    config=BotoConfig(
+        read_timeout=_ai.get("bedrock_read_timeout", 300),
+        retries={"max_attempts": _ai.get("bedrock_max_retries", 2)},
+    )
 )
 
 # Max chars to send to Bedrock in a single request (~50K chars ≈ ~15K tokens)
-MAX_CONTENT_CHARS = 50000
+MAX_CONTENT_CHARS = _ai.get("max_content_chars", 50000)
 # Max chunks to process per Lambda invocation (prevents timeout; resumes on next trigger)
-MAX_CHUNKS_PER_RUN = int(os.environ.get("MAX_CHUNKS_PER_RUN", "10"))
+MAX_CHUNKS_PER_RUN = int(os.environ.get("MAX_CHUNKS_PER_RUN", str(_ai.get("max_chunks_per_run", 10))))
 
 # Canonical list of PCO modules for consistent tagging
 PCO_MODULES = [
@@ -131,7 +136,7 @@ async def invoke_bedrock(model_id: str, system: str, prompt: str, max_tokens: in
     body = {
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": max_tokens,
-        "temperature": 0.1,
+        "temperature": _ai.get("temperature", 0.3),
         "system": system,
         "messages": [
             {
