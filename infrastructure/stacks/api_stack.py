@@ -109,6 +109,7 @@ class ApiStack(cdk.Stack):
                 "APP_ENV": deploy_env,
                 "LOG_LEVEL": log_level,
                 "DESCOPE_PROJECT_ID": descope_project_id,
+                "MOCK_AUTH_ENABLED": "true" if deploy_env == "development" else "false",
                 "STATSIG_SERVER_KEY_SECRET_ARN": (
                     statsig_server_key_secret.secret_arn if statsig_server_key_secret else ""
                 ),

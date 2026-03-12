@@ -1,5 +1,6 @@
 """FastAPI authentication middleware using Descope."""
 import logging
+import os
 
 from fastapi import Request, Depends
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -38,8 +39,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = auth_header[7:]  # Remove 'Bearer '
 
         # --- Demo Mode / Mock Token Support ---
-        # Controlled by Statsig gate — defaults to OFF, NEVER on in production
-        mock_auth_enabled = statsig_client.check_gate("mock_auth_bypass")
+        # Controlled by Statsig gate OR MOCK_AUTH_ENABLED env var (fallback)
+        mock_auth_enabled = (
+            statsig_client.check_gate("mock_auth_bypass")
+            or os.environ.get("MOCK_AUTH_ENABLED", "").lower() == "true"
+        )
 
         mock_users = {
             "mock-admin-token": CurrentUser(
