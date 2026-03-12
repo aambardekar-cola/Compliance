@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthSession } from '../auth/AuthProvider';
 import { ArrowLeft, ExternalLink, Calendar, AlertTriangle } from 'lucide-react';
 import apiClient from '../api/client';
+import { trackRegulationView } from '../statsig/analytics';
 
 const MOCK_DETAIL = {
     id: '1',
@@ -48,6 +50,8 @@ export default function RegulationDetail() {
         queryFn: () => apiClient.getRegulation(id),
         enabled: !!sessionToken,
     });
+
+    useEffect(() => { if (id) trackRegulationView(id, 'detail_page'); }, [id]);
 
     const reg = data || MOCK_DETAIL;
 

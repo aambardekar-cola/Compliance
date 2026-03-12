@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthSession } from '../auth/AuthProvider';
 import {
@@ -10,6 +11,7 @@ import {
     Layers,
 } from 'lucide-react';
 import apiClient from '../api/client';
+import { trackNavigation } from '../statsig/analytics';
 
 // Module colors matching other pages
 const MODULE_COLORS = {
@@ -29,6 +31,8 @@ const LAYER_STYLES = {
 export default function Dashboard() {
     const { sessionToken } = useAuthSession();
     apiClient.setToken(sessionToken);
+
+    useEffect(() => { trackNavigation('dashboard'); }, []);
 
     const { data: dashboardData, isLoading: isDashboardLoading } = useQuery({
         queryKey: ['dashboard'],
