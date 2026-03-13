@@ -17,7 +17,7 @@ from shared.config import get_settings
 from shared.db import close_db
 from shared import statsig_client
 from api.middleware.auth import AuthMiddleware
-from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin, notifications, system_config
+from api.routes import dashboard, regulations, gaps, reports, subscriptions, admin, notifications, system_config
 
 # ---- Logging ----
 logging.basicConfig(level=logging.INFO)
@@ -76,7 +76,7 @@ app.add_middleware(
 app.include_router(dashboard.router, tags=["Dashboard"])
 app.include_router(regulations.router, tags=["Regulations"])
 app.include_router(gaps.router, tags=["Gap Analysis"])
-app.include_router(communications.router, tags=["Communications"])
+
 app.include_router(reports.router, tags=["Reports"])
 app.include_router(subscriptions.router, tags=["Subscriptions"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])

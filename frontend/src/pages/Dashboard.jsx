@@ -4,7 +4,6 @@ import { useAuthSession } from '../auth/AuthProvider';
 import {
     FileText,
     AlertTriangle,
-    Send,
     TrendingUp,
     Shield,
     Activity,
@@ -64,7 +63,6 @@ export default function Dashboard() {
 
     // Use mock only for dashboard API; regulations and gaps come from live data
     const dashboard = dashboardData || {
-        communications: { total: 8, drafts: 2, pending_approval: 1, sent: 5 },
         isMock: true,
     };
 
@@ -122,19 +120,7 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div className="stat-card animate-in stagger-3" style={{ '--stat-gradient': 'var(--gradient-success)' }}>
-                    <div className="stat-label">
-                        <Send size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                        Communications
-                    </div>
-                    <div className="stat-value">
-                        {dashboard.communications?.sent || 0}
-                        {dashboard.isMock && <PreviewBadge />}
-                    </div>
-                    <div className="stat-change">
-                        {dashboard.communications?.drafts || 0} drafts pending
-                    </div>
-                </div>
+
 
                 <div className="stat-card animate-in stagger-4" style={{ '--stat-gradient': 'var(--gradient-info)' }}>
                     <div className="stat-label">

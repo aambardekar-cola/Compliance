@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Regulations from './pages/Regulations';
 import RegulationDetail from './pages/RegulationDetail';
 import GapAnalysis from './pages/GapAnalysis';
-import Communications from './pages/Communications';
+
 import ExecSummary from './pages/ExecSummary';
 import Settings from './pages/Settings';
 import AdminUrls from './pages/AdminUrls';
@@ -47,7 +47,7 @@ function App() {
                 <Route path="/regulations" element={<Regulations />} />
                 <Route path="/regulations/:id" element={<RegulationDetail />} />
                 <Route path="/gaps" element={<GapAnalysis />} />
-                <Route path="/communications" element={<Communications />} />
+
                 <Route path="/reports" element={<ExecSummary />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin/urls" element={<AdminUrls />} />

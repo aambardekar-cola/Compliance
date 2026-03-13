@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
 from shared.models import (
-    Regulation, ComplianceGap, Communication, Tenant,
-    RegulationStatus, GapSeverity, GapStatus, CommunicationStatus,
+    Regulation, ComplianceGap,
+    RegulationStatus, GapSeverity, GapStatus,
 )
 from shared import statsig_client
 from api.middleware.auth import get_current_user
@@ -55,27 +55,6 @@ async def get_dashboard(
     gap_result = await db.execute(gap_query)
     gap_stats = gap_result.one()
 
-    # ---- Communication Stats ----
-    comm_query = select(
-        func.count(Communication.id).label("total"),
-        func.count(case((Communication.status == CommunicationStatus.DRAFT, 1))).label("drafts"),
-        func.count(case((Communication.status == CommunicationStatus.PENDING_APPROVAL, 1))).label("pending"),
-        func.count(case((Communication.status == CommunicationStatus.SENT, 1))).label("sent"),
-    )
-
-    # Filter by tenant for client users
-    if not user.is_internal and user.tenant_id:
-
-        tenant_result = await db.execute(
-            select(Tenant.id).where(Tenant.descope_tenant_id == user.tenant_id)
-        )
-        tenant = tenant_result.scalar_one_or_none()
-        if tenant:
-            comm_query = comm_query.where(Communication.tenant_id == tenant)
-
-    comm_result = await db.execute(comm_query)
-    comm_stats = comm_result.one()
-
     # ---- Upcoming Deadlines ----
     today = datetime.utcnow().date()
     upcoming_query = (
@@ -117,11 +96,6 @@ async def get_dashboard(
             "open": gap_stats.open,
             "resolved": gap_stats.resolved,
         },
-        "communications": {
-            "total": comm_stats.total,
-            "drafts": comm_stats.drafts,
-            "pending_approval": comm_stats.pending,
-            "sent": comm_stats.sent,
-        },
         "upcoming_deadlines": upcoming_deadlines,
     }
+

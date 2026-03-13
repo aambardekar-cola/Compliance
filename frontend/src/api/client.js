@@ -62,26 +62,7 @@ class ApiClient {
         return this.request(`/gaps/${id}`);
     }
 
-    // Communications
-    getCommunications(params = {}) {
-        const query = new URLSearchParams(params).toString();
-        return this.request(`/communications${query ? `?${query}` : ''}`);
-    }
 
-    getCommunication(id) {
-        return this.request(`/communications/${id}`);
-    }
-
-    approveCommunication(id) {
-        return this.request(`/communications/${id}/approve`, { method: 'POST' });
-    }
-
-    sendCommunication(id) {
-        return this.request(`/communications/${id}/send`, {
-            method: 'POST',
-            body: JSON.stringify({ send_now: true }),
-        });
-    }
 
     // Reports
     getReports(params = {}) {

@@ -4,7 +4,6 @@ import {
     LayoutDashboard,
     FileText,
     AlertTriangle,
-    Send,
     BarChart3,
     Settings,
     Shield,
@@ -29,9 +28,8 @@ const navItems = [
         ],
     },
     {
-        section: 'Communication',
+        section: 'Reporting',
         items: [
-            { to: '/communications', icon: Send, label: 'Communications' },
             { to: '/reports', icon: BarChart3, label: 'Exec Reports' },
         ],
     },

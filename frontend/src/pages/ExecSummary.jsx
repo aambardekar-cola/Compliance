@@ -6,7 +6,7 @@ import apiClient from '../api/client';
 const MOCK_REPORTS = [
     {
         id: '1', week_start: '2026-02-24', week_end: '2026-03-02',
-        metrics: { new_regulations: 2, gaps_identified: 5, gaps_resolved: 3, communications_sent: 2, compliance_score: 72 },
+        metrics: { new_regulations: 2, gaps_identified: 5, gaps_resolved: 3, compliance_score: 72 },
         risks: [
             { title: 'API Interoperability deadline approaching', severity: 'high', description: 'FHIR API implementation behind schedule' },
             { title: 'Service delivery module refactor scope expansion', severity: 'medium', description: 'Additional edge cases identified' },
@@ -16,11 +16,11 @@ const MOCK_REPORTS = [
     },
     {
         id: '2', week_start: '2026-02-17', week_end: '2026-02-23',
-        metrics: { new_regulations: 1, gaps_identified: 3, gaps_resolved: 2, communications_sent: 1, compliance_score: 68 },
+        metrics: { new_regulations: 1, gaps_identified: 3, gaps_resolved: 2, compliance_score: 68 },
         risks: [
             { title: 'CY2026 Final Rule implementation critical gaps', severity: 'critical', description: '3 critical gaps in service delivery timeframes' },
         ],
-        highlights: ['Ingested CY2026 PACE Final Rule', 'Generated client communication'],
+        highlights: ['Ingested CY2026 PACE Final Rule'],
         sent_at: '2026-02-24T08:00:00', created_at: '2026-02-24',
     },
 ];
@@ -71,7 +71,6 @@ export default function ExecSummary() {
                             <MetricBox label="New Regs" value={report.metrics.new_regulations} icon={<BarChart3 size={14} />} />
                             <MetricBox label="Gaps Found" value={report.metrics.gaps_identified} icon={<AlertTriangle size={14} />} color="var(--color-warning)" />
                             <MetricBox label="Gaps Resolved" value={report.metrics.gaps_resolved} icon={<CheckCircle size={14} />} color="var(--color-success)" />
-                            <MetricBox label="Comms Sent" value={report.metrics.communications_sent} icon={<TrendingUp size={14} />} />
                             <MetricBox label="Score" value={`${report.metrics.compliance_score}%`} icon={<TrendingUp size={14} />} color="var(--color-accent-light)" />
                         </div>
 
