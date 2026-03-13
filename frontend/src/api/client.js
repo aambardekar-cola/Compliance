@@ -74,6 +74,22 @@ class ApiClient {
         return this.request(`/reports/${id}`);
     }
 
+    getLatestReport() {
+        return this.request('/reports/latest');
+    }
+
+    getComplianceScores() {
+        return this.request('/reports/scores');
+    }
+
+    generateReport() {
+        return this.request('/admin/reports/generate', { method: 'POST' });
+    }
+
+    sendReport(id) {
+        return this.request(`/admin/reports/${id}/send`, { method: 'POST' });
+    }
+
     // Subscriptions
     getSubscriptions() {
         return this.request('/subscriptions');

@@ -1,13 +1,14 @@
-"""Reports API routes — executive summary reports."""
+"""Reports API routes — executive summary reports and compliance scoring."""
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
 from shared.models import ExecReport
 from api.middleware.auth import get_current_user
+from reporting.scoring import compute_module_scores, compute_overall_score
 
 router = APIRouter()
 
@@ -25,6 +26,13 @@ async def list_reports(
     if not user.is_internal:
         raise HTTPException(403, "Executive reports are internal only")
 
+    # Total count
+    count_result = await db.execute(
+        select(func.count()).select_from(ExecReport)
+    )
+    total = count_result.scalar() or 0
+
+    # Paginated items
     query = (
         select(ExecReport)
         .order_by(desc(ExecReport.week_start))
@@ -37,8 +45,51 @@ async def list_reports(
 
     return {
         "items": [_serialize_report(r) for r in reports],
+        "total": total,
         "page": page,
         "page_size": page_size,
+    }
+
+
+@router.get("/reports/latest")
+async def get_latest_report(
+    request: Request,
+    db: AsyncSession = Depends(get_session_dependency),
+):
+    """Get the most recent executive report."""
+    user = get_current_user(request)
+
+    if not user.is_internal:
+        raise HTTPException(403, "Executive reports are internal only")
+
+    result = await db.execute(
+        select(ExecReport).order_by(desc(ExecReport.week_start)).limit(1)
+    )
+    report = result.scalar_one_or_none()
+
+    if not report:
+        return {"report": None}
+
+    return {"report": _serialize_report(report, detailed=True)}
+
+
+@router.get("/reports/scores")
+async def get_compliance_scores(
+    request: Request,
+    db: AsyncSession = Depends(get_session_dependency),
+):
+    """Get live per-module compliance scores."""
+    user = get_current_user(request)
+
+    if not user.is_internal:
+        raise HTTPException(403, "Compliance scores are internal only")
+
+    module_scores = await compute_module_scores(db)
+    overall_score = await compute_overall_score(db)
+
+    return {
+        "overall_score": overall_score,
+        "module_scores": module_scores,
     }
 
 
@@ -72,6 +123,8 @@ def _serialize_report(report: ExecReport, detailed: bool = False) -> dict:
         "week_start": report.week_start.isoformat(),
         "week_end": report.week_end.isoformat(),
         "metrics": report.metrics or {},
+        "risks": report.risks or [],
+        "highlights": report.highlights or [],
         "sent_at": report.sent_at.isoformat() if report.sent_at else None,
         "created_at": report.created_at.isoformat() if report.created_at else None,
     }
@@ -80,8 +133,6 @@ def _serialize_report(report: ExecReport, detailed: bool = False) -> dict:
         data.update({
             "summary_html": report.summary_html,
             "summary_plain": report.summary_plain,
-            "risks": report.risks or [],
-            "highlights": report.highlights or [],
             "sent_to": report.sent_to or [],
         })
 

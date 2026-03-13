@@ -315,3 +315,25 @@ async def seed_exec_report(db_session):
     await db_session.flush()
     return report
 
+
+@pytest_asyncio.fixture
+async def seed_gaps_for_scoring(db_session, seed_scraped_content):
+    """Create gaps for compliance scoring tests: 2 resolved + 1 open in Pharmacy."""
+    gaps = []
+    for i, status in enumerate([GapStatus.RESOLVED, GapStatus.RESOLVED, GapStatus.IDENTIFIED]):
+        gap = ComplianceGap(
+            id=uuid.uuid4(),
+            scraped_content_id=seed_scraped_content.id,
+            title=f"Scoring Gap {i + 1}",
+            description=f"Test gap {i + 1} for scoring",
+            status=status,
+            severity=GapSeverity.HIGH,
+            affected_modules=["Pharmacy"],
+            affected_layer=AffectedLayer.BACKEND,
+        )
+        db_session.add(gap)
+        gaps.append(gap)
+    await db_session.flush()
+    return gaps
+
+

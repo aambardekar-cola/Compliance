@@ -295,3 +295,49 @@ async def reset_data_and_rescrape(session: AsyncSession = Depends(get_session_de
         "scraper_triggered": scraper_triggered,
         "scraper_function": scraper_name,
     }
+
+
+# ---- Report Generation ----
+
+@router.post("/reports/generate")
+async def generate_report(
+    request=Depends(require_role(UserRole.INTERNAL_ADMIN)),
+):
+    """Manually trigger executive report generation."""
+    from reporting.handler import generate_report as run_generate
+
+    try:
+        result = await run_generate(send_email=False)
+        return {"status": "ok", "report": result}
+    except Exception as e:
+        raise HTTPException(500, f"Report generation failed: {e}")
+
+
+@router.post("/reports/{report_id}/send")
+async def send_report(
+    report_id: UUID,
+    request=Depends(require_role(UserRole.INTERNAL_ADMIN)),
+    db: AsyncSession = Depends(get_session_dependency),
+):
+    """Send an existing report via SES email."""
+    from shared.models import ExecReport
+    from reporting.handler import _send_report_email, _get_recipients
+
+    result = await db.execute(
+        select(ExecReport).where(ExecReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(404, "Report not found")
+
+    recipients = _get_recipients()
+    if not recipients:
+        raise HTTPException(400, "No recipients configured. Set REPORT_RECIPIENTS env var.")
+
+    await _send_report_email(report, recipients)
+    report.sent_to = recipients
+    report.sent_at = datetime.utcnow()
+    await db.commit()
+
+    return {"status": "sent", "recipients": recipients}
+

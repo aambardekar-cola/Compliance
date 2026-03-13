@@ -1,4 +1,6 @@
 """Amazon Bedrock LLM client wrapper for compliance analysis."""
+from __future__ import annotations
+
 import json
 import logging
 
