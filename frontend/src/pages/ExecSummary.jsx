@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuthSession } from '../auth/AuthProvider';
+import { useAuthSession, useAuthUser } from '../auth/AuthProvider';
 import { BarChart3, AlertTriangle, TrendingUp, CheckCircle, Send, Zap, Loader2 } from 'lucide-react';
 import apiClient from '../api/client';
 
 export default function ExecSummary() {
-    const { sessionToken, user } = useAuthSession();
+    const { sessionToken } = useAuthSession();
+    const { user } = useAuthUser();
     const queryClient = useQueryClient();
     apiClient.setToken(sessionToken);
 
