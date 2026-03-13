@@ -8,7 +8,7 @@ export default function ExecSummary() {
     const queryClient = useQueryClient();
     apiClient.setToken(sessionToken);
 
-    const isAdmin = user?.role === 'internal_admin';
+    const isAdmin = user?.roles?.includes('internal_admin') || user?.role === 'INTERNAL_ADMIN';
 
     const { data, isLoading } = useQuery({
         queryKey: ['reports'],
