@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Statsig SDK wrapper with graceful fallback.
 
 Provides helpers for feature gates, dynamic configs, and experiments.

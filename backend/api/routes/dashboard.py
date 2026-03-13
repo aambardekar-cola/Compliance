@@ -50,7 +50,6 @@ async def get_dashboard(
         func.count(case((ComplianceGap.severity == GapSeverity.HIGH, 1))).label("high"),
         func.count(case((ComplianceGap.status == GapStatus.IDENTIFIED, 1))).label("open"),
         func.count(case((ComplianceGap.status == GapStatus.RESOLVED, 1))).label("resolved"),
-        func.cast(0, func.Integer).label("total_effort_hours"), # ComplianceGap doesn't track effort yet
     )
 
     gap_result = await db.execute(gap_query)
@@ -111,11 +110,12 @@ async def get_dashboard(
         },
         "gaps": {
             "total": gap_stats.total,
-            "critical": gap_stats.critical,
-            "high": gap_stats.high,
+            "by_severity": {
+                "critical": gap_stats.critical,
+                "high": gap_stats.high,
+            },
             "open": gap_stats.open,
             "resolved": gap_stats.resolved,
-            "total_effort_hours": gap_stats.total_effort_hours or 0,
         },
         "communications": {
             "total": comm_stats.total,

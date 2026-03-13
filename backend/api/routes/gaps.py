@@ -63,36 +63,40 @@ async def list_gaps(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar()
 
-    # Apply pagination and sorting
+    # Get total severity summary (across all filtered data, not just current page)
+    severity_subquery = (
+        select(
+            ComplianceGap.severity,
+            func.count(ComplianceGap.id).label("count"),
+        )
+        .where(ComplianceGap.id.in_(select(query.subquery().c.id)))
+        .group_by(ComplianceGap.severity)
+    )
+    severity_result = await db.execute(severity_subquery)
+    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for row in severity_result.all():
+        sev_value = row.severity.value if hasattr(row.severity, 'value') else str(row.severity) if row.severity else "low"
+        if sev_value in severity_counts:
+            severity_counts[sev_value] = row.count
+
+    # Apply pagination and sorting (CASE-based ordering works on both PostgreSQL and SQLite)
+    from sqlalchemy import case
+    severity_order = case(
+        (ComplianceGap.severity == GapSeverity.CRITICAL, 0),
+        (ComplianceGap.severity == GapSeverity.HIGH, 1),
+        (ComplianceGap.severity == GapSeverity.MEDIUM, 2),
+        (ComplianceGap.severity == GapSeverity.LOW, 3),
+        else_=4,
+    )
     query = (
         query
-        .order_by(
-            desc(ComplianceGap.severity == GapSeverity.CRITICAL.value),
-            desc(ComplianceGap.severity == GapSeverity.HIGH.value),
-            desc(ComplianceGap.created_at),
-        )
+        .order_by(severity_order, desc(ComplianceGap.created_at))
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
 
     result = await db.execute(query)
     gaps = result.scalars().all()
-
-    # Get total severity summary (across all data, not just current page)
-    severity_subquery = (
-        select(
-            ComplianceGap.severity,
-            func.count(ComplianceGap.id).label("count"),
-        )
-        .select_from(query.subquery())
-        .group_by(ComplianceGap.severity)
-    )
-    severity_result = await db.execute(severity_subquery)
-    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    for row in severity_result.all():
-        sev_value = row.severity.value if row.severity else "low"
-        if sev_value in severity_counts:
-            severity_counts[sev_value] = row.count
 
     return {
         "items": [_serialize_gap(g) for g in gaps],
