@@ -1,0 +1,33 @@
+stateDiagram-v2
+    [*] --> Started: Lambda invoked
+
+    Started --> Completed: All chunks processed successfully
+    Started --> Failed: Unrecoverable error
+    Started --> Partial: Some chunks failed
+
+    Partial --> Completed: Retry succeeds
+    Partial --> Failed: Max retries exceeded
+
+    Completed --> [*]: Notification sent
+    Failed --> [*]: Error notification sent
+
+    state Started {
+        [*] --> Scraping: run_type = scraper
+        [*] --> Ingesting: run_type = ingestion
+        [*] --> Analyzing: run_type = analysis
+
+        Scraping --> SQS_Enqueue: New content found
+        Ingesting --> Relevance_Check: Haiku scoring
+        Relevance_Check --> SQS_Enqueue: Score above threshold
+        Relevance_Check --> Skipped: Below threshold
+        Analyzing --> Gap_Extraction: Sonnet analysis
+        Gap_Extraction --> DB_Write: Gaps + Regulations saved
+    }
+
+    note right of Completed
+        Pipeline stats recorded:
+        - regulations_added
+        - gaps_added
+        - duration_seconds
+        - errors_count
+    end note

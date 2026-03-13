@@ -1,0 +1,40 @@
+graph LR
+    subgraph Public["Public (No Auth)"]
+        HEALTH["/health"]
+    end
+
+    subgraph Authenticated["Authenticated (All Roles)"]
+        DASH["/dashboard"]
+        REGS["/regulations"]
+        GAPS["/gaps"]
+        REPORTS["/reports"]
+        SUBS["/subscriptions"]
+    end
+
+    subgraph AdminOnly["Admin Only (internal_admin)"]
+        ADMIN_URLS["/admin/urls"]
+        ADMIN_DIAG["/admin/diagnostics"]
+        ADMIN_LOGS["/admin/logs"]
+        NOTIFS["/admin/notifications"]
+        PIPELINE["/admin/pipeline-runs"]
+        SYSCONFIG["/admin/system-config"]
+        TRIGGER["/admin/trigger-analysis"]
+    end
+
+    APIGW["API Gateway"] --> HEALTH
+    APIGW --> DASH
+    APIGW --> REGS
+    APIGW --> GAPS
+    APIGW --> REPORTS
+    APIGW --> SUBS
+    APIGW --> ADMIN_URLS
+    APIGW --> ADMIN_DIAG
+    APIGW --> ADMIN_LOGS
+    APIGW --> NOTIFS
+    APIGW --> PIPELINE
+    APIGW --> SYSCONFIG
+    APIGW --> TRIGGER
+
+    style Public fill:#e8f5e9,stroke:#2e7d32
+    style Authenticated fill:#e3f2fd,stroke:#1565c0
+    style AdminOnly fill:#fff3e0,stroke:#e65100

@@ -1,0 +1,64 @@
+graph TB
+    subgraph AWS["AWS Account (us-east-1)"]
+        subgraph PublicSubnets["Public Subnets"]
+            NAT["NAT Gateway"]
+            APIGW["API Gateway (Regional)"]
+            CF["CloudFront Distribution"]
+        end
+
+        subgraph PrivateSubnets["Private Subnets (VPC)"]
+            subgraph LambdaSG["Lambda Security Group"]
+                API_LAM["API Lambda"]
+                SCRAPER_LAM["Scraper Lambda"]
+                INGEST_LAM["Ingestion Lambda"]
+                ANALYSIS_LAM["Analysis Lambda"]
+                NOTIF_LAM["Notification Lambda"]
+                REPORT_LAM["Report Lambda"]
+            end
+
+            subgraph DBSG["Database Security Group"]
+                PROXY["RDS Proxy"]
+                AURORA["Aurora Serverless v2"]
+            end
+        end
+
+        subgraph ManagedServices["Managed Services (No VPC)"]
+            S3_FE["S3: Frontend Assets"]
+            S3_DOC["S3: Documents"]
+            SQS1["SQS: Ingestion Queue"]
+            SQS2["SQS: Analysis Queue"]
+            SES_SVC["SES"]
+            SM["Secrets Manager"]
+            EB["EventBridge"]
+        end
+
+        subgraph ExternalAPIs["External APIs (via NAT)"]
+            BEDROCK_SVC["Bedrock (us-east-1)"]
+            DESCOPE_SVC["Descope API"]
+            DD_SVC["Datadog Intake"]
+            STATSIG_SVC["Statsig API"]
+            CMS["CMS.gov Sources"]
+        end
+    end
+
+    CF --> S3_FE
+    CF --> APIGW
+    APIGW --> API_LAM
+
+    LambdaSG -->|"Port 5432"| DBSG
+    LambdaSG -->|"NAT → Internet"| NAT
+    NAT --> BEDROCK_SVC
+    NAT --> DESCOPE_SVC
+    NAT --> DD_SVC
+    NAT --> STATSIG_SVC
+    NAT --> CMS
+
+    EB -->|"Cron schedule"| SCRAPER_LAM
+    SQS1 -->|"Trigger"| INGEST_LAM
+    SQS2 -->|"Trigger"| ANALYSIS_LAM
+
+    API_LAM --> SM
+    API_LAM --> SQS2
+    SCRAPER_LAM --> SQS1
+    INGEST_LAM --> SQS2
+    NOTIF_LAM --> SES_SVC

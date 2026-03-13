@@ -1,0 +1,42 @@
+sequenceDiagram
+    autonumber
+    participant U as User (Browser)
+    participant FE as React Frontend
+    participant DESC as Descope
+    participant APIGW as API Gateway
+    participant AUTH as Auth Middleware
+    participant API as FastAPI Routes
+    participant DB as Aurora (PostgreSQL)
+
+    U->>FE: Visit app
+    FE->>DESC: Initialize Descope SDK
+    U->>DESC: Login (email/SSO)
+    DESC-->>FE: JWT (access token + refresh token)
+    FE->>FE: Store token in memory
+
+    rect rgb(230, 245, 255)
+        Note over FE,API: Authenticated API Request
+        FE->>APIGW: GET /api/regulations<br/>Authorization: Bearer {JWT}
+        APIGW->>AUTH: Forward request
+        AUTH->>DESC: Validate JWT (JWKS)
+        DESC-->>AUTH: Token valid + claims
+        AUTH->>AUTH: Extract role, tenant_id, user_id
+        AUTH->>AUTH: Check role permissions
+        alt Role Authorized
+            AUTH->>API: Inject CurrentUser into request
+            API->>DB: Query with tenant isolation
+            DB-->>API: Results
+            API-->>FE: 200 JSON response
+        else Role Denied
+            AUTH-->>FE: 403 Forbidden
+        end
+    end
+
+    rect rgb(255, 240, 230)
+        Note over FE,AUTH: Public Endpoints (No Auth)
+        FE->>APIGW: GET /health
+        APIGW->>AUTH: Forward request
+        AUTH->>AUTH: Path in PUBLIC_PATHS - skip auth
+        AUTH->>API: Pass through
+        API-->>FE: 200 healthy
+    end

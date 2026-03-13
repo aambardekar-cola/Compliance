@@ -1,0 +1,41 @@
+flowchart LR
+    subgraph Sources["🌐 External Sources"]
+        CMS["CMS.gov"]
+        FR["Federal Register"]
+        CFR["eCFR"]
+    end
+
+    subgraph S1["Stage 1: Scraping"]
+        CRON["EventBridge Cron"] --> SCRAPER["Scraper Lambda"]
+        SCRAPER -->|"Fetch HTML"| Sources
+        SCRAPER -->|"Hash-based dedup"| SC["ScrapedContent (DB)"]
+        SCRAPER -->|"New content event"| SQS_I["SQS Ingestion Queue"]
+    end
+
+    subgraph S2["Stage 2: Ingestion"]
+        SQS_I --> INGEST["Ingestion Lambda"]
+        INGEST -->|"Haiku: Relevance Score"| HAIKU["Bedrock Haiku"]
+        INGEST -->|"Score > threshold"| REG["Regulation (DB)"]
+        INGEST -->|"Chunked for analysis"| SQS_A["SQS Analysis Queue"]
+    end
+
+    subgraph S3["Stage 3: Analysis"]
+        SQS_A --> ANALYSIS["Analysis Lambda"]
+        ANALYSIS -->|"Sonnet: Extract gaps"| SONNET["Bedrock Sonnet"]
+        ANALYSIS -->|"Status detection"| STATUS["Regulation Status"]
+        ANALYSIS -->|"Program area mapping"| AREAS["Program Areas"]
+        ANALYSIS -->|"Gap extraction"| GAPS["ComplianceGap (DB)"]
+        ANALYSIS -->|"Module mapping"| MODULES["Affected PCO Modules"]
+    end
+
+    subgraph S4["Stage 4: Notification"]
+        GAPS --> NOTIF["AdminNotification (DB)"]
+        REG --> NOTIF
+        NOTIF --> BELL["🔔 Notification Center"]
+    end
+
+    subgraph S5["Stage 5: Reporting"]
+        GAPS --> REPORT["ExecReport (DB)"]
+        REG --> REPORT
+        REPORT -->|"SES"| EMAIL["📧 Leadership Email"]
+    end

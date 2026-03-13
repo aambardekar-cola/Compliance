@@ -1,0 +1,158 @@
+erDiagram
+    Tenant ||--o{ Subscription : "has"
+    Tenant ||--o{ Communication : "receives"
+
+    ComplianceRuleUrl ||--o{ ScrapedContent : "produces"
+
+    ScrapedContent ||--o{ Regulation : "extracted from"
+    ScrapedContent ||--o{ ComplianceGap : "produces"
+
+    Regulation ||--o{ ComplianceGap : "has"
+    Regulation ||--o{ GapAnalysis : "has"
+    Regulation ||--o{ Communication : "triggers"
+
+    PipelineRun ||--o{ AdminNotification : "generates"
+
+    Tenant {
+        uuid id PK
+        string name
+        string descope_tenant_id UK
+        json settings
+        bool is_active
+    }
+
+    ComplianceRuleUrl {
+        uuid id PK
+        string name
+        string url
+        text description
+        bool is_active
+    }
+
+    ScrapedContent {
+        uuid id PK
+        uuid url_id FK
+        text content_text
+        string content_hash
+        bool is_processed
+        int chunks_processed
+        int total_chunks
+    }
+
+    Regulation {
+        uuid id PK
+        uuid scraped_content_id FK
+        string source
+        string title
+        text summary
+        float relevance_score
+        json affected_areas
+        json program_area
+        enum status
+        date effective_date
+        date comment_deadline
+        bool gap_analysis_requested
+    }
+
+    ComplianceGap {
+        uuid id PK
+        uuid scraped_content_id FK
+        uuid regulation_id FK
+        string title
+        text description
+        enum status
+        enum severity
+        enum affected_layer
+        json affected_modules
+        date deadline
+    }
+
+    GapAnalysis {
+        uuid id PK
+        uuid regulation_id FK
+        string title
+        enum severity
+        enum status
+        json affected_code
+        json affected_components
+        int effort_hours
+        string jira_epic_key
+    }
+
+    Communication {
+        uuid id PK
+        uuid regulation_id FK
+        uuid tenant_id FK
+        enum type
+        string subject
+        enum status
+        datetime sent_at
+    }
+
+    ExecReport {
+        uuid id PK
+        date week_start
+        date week_end
+        text summary_html
+        json metrics
+        json risks
+        json highlights
+    }
+
+    Subscription {
+        uuid id PK
+        uuid tenant_id FK
+        string feature
+        bool is_active
+        string notification_email
+    }
+
+    PipelineRun {
+        uuid id PK
+        enum run_type
+        enum status
+        datetime started_at
+        datetime ended_at
+        int regulations_added
+        int gaps_added
+        int errors_count
+    }
+
+    AdminNotification {
+        uuid id PK
+        uuid pipeline_run_id FK
+        enum notification_type
+        string title
+        text message
+        bool is_read
+    }
+
+    PipelineLog {
+        uuid id PK
+        string component
+        string level
+        text message
+        json details
+    }
+
+    SystemConfig {
+        uuid id PK
+        string key UK
+        json value
+        text description
+    }
+
+    AuditLog {
+        uuid id PK
+        string user_id
+        uuid tenant_id
+        string action
+        string resource_type
+    }
+
+    IntegrationConfig {
+        uuid id PK
+        string integration_type
+        json config
+        bool is_active
+    }

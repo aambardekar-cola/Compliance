@@ -1,0 +1,87 @@
+graph TB
+    subgraph Users["👤 Users"]
+        IA["Internal Admin"]
+        IU["Internal User"]
+        CA["Client Admin"]
+        CU["Client User"]
+    end
+
+    subgraph Frontend["Frontend (React SPA)"]
+        CF["CloudFront CDN"]
+        S3F["S3 Static Hosting"]
+        RUM["Datadog RUM"]
+    end
+
+    subgraph Auth["Authentication"]
+        DESC["Descope"]
+    end
+
+    subgraph API["API Layer"]
+        APIGW["API Gateway"]
+        APILAM["API Lambda (FastAPI + Mangum)"]
+        AUTHMW["Auth Middleware"]
+    end
+
+    subgraph Pipeline["Pipeline Layer"]
+        SCRAPER["Scraper Lambda"]
+        INGEST["Ingestion Lambda"]
+        ANALYSIS["Analysis Lambda"]
+        SQS_I["SQS: Ingestion Queue"]
+        SQS_A["SQS: Analysis Queue"]
+        CRON["EventBridge Cron"]
+    end
+
+    subgraph AI["AI / LLM"]
+        BEDROCK["Amazon Bedrock"]
+        HAIKU["Claude 3.5 Haiku (filtering)"]
+        SONNET["Claude 3.5 Sonnet (extraction)"]
+    end
+
+    subgraph Data["Data Layer"]
+        VPC["VPC (Private Subnets)"]
+        RDS["Aurora Serverless v2 (PostgreSQL)"]
+        PROXY["RDS Proxy"]
+        S3D["S3: Documents Bucket"]
+        SECRETS["Secrets Manager"]
+    end
+
+    subgraph Notifications["Notification Layer"]
+        NOTIF_LAM["Notification Lambda"]
+        REPORT_LAM["Report Generator Lambda"]
+        SES["Amazon SES"]
+    end
+
+    subgraph Observability["Observability"]
+        DD["Datadog APM"]
+        STATSIG["Statsig (Feature Flags)"]
+    end
+
+    Users --> CF --> S3F
+    CF --> APIGW
+    Users --> DESC --> AUTHMW
+    APIGW --> APILAM --> AUTHMW
+    APILAM --> PROXY --> RDS
+    APILAM --> S3D
+    APILAM --> SQS_A
+
+    CRON --> SCRAPER
+    SCRAPER --> PROXY
+    SCRAPER --> SQS_I
+    SQS_I --> INGEST
+    INGEST --> BEDROCK
+    INGEST --> PROXY
+    INGEST --> SQS_A
+    SQS_A --> ANALYSIS
+    ANALYSIS --> BEDROCK
+    ANALYSIS --> PROXY
+
+    NOTIF_LAM --> PROXY
+    NOTIF_LAM --> SES
+    REPORT_LAM --> PROXY
+    REPORT_LAM --> SES
+
+    APILAM --> DD
+    SCRAPER --> DD
+    ANALYSIS --> DD
+    CF --> RUM --> DD
+    APILAM --> STATSIG

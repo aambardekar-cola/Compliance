@@ -1,0 +1,24 @@
+graph TB
+    DATA["DataStack<br/>━━━━━━━━━━━━━<br/>VPC + Subnets<br/>Aurora Serverless v2<br/>RDS Proxy<br/>S3 Documents Bucket<br/>Secrets Manager<br/>DD API Key Secret<br/>Statsig Key Secret"]
+
+    API["ApiStack<br/>━━━━━━━━━━━━━<br/>API Gateway (REST)<br/>API Lambda (FastAPI)<br/>Descope Auth<br/>CORS Config"]
+
+    PIPELINE["PipelineStack<br/>━━━━━━━━━━━━━<br/>Scraper Lambda<br/>Ingestion Lambda<br/>Analysis Lambda<br/>SQS Ingestion Queue<br/>SQS Analysis Queue<br/>EventBridge Cron"]
+
+    NOTIF["NotificationStack<br/>━━━━━━━━━━━━━<br/>Notification Lambda<br/>Report Generator Lambda<br/>SES Integration"]
+
+    FRONTEND["FrontendStack<br/>━━━━━━━━━━━━━<br/>S3 Static Hosting<br/>CloudFront CDN<br/>OAI Access Policy"]
+
+    DATA --> API
+    DATA --> PIPELINE
+    DATA --> NOTIF
+    API --> FRONTEND
+
+    API -.->|"analysis_queue_url"| PIPELINE
+    PIPELINE -.->|"grant_send_messages"| API
+
+    style DATA fill:#e8f5e9,stroke:#2e7d32
+    style API fill:#e3f2fd,stroke:#1565c0
+    style PIPELINE fill:#fff3e0,stroke:#e65100
+    style NOTIF fill:#fce4ec,stroke:#c62828
+    style FRONTEND fill:#f3e5f5,stroke:#6a1b9a
