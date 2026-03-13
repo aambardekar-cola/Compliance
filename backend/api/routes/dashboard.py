@@ -22,7 +22,7 @@ async def get_dashboard(
     db: AsyncSession = Depends(get_session_dependency),
 ):
     """Get aggregated compliance dashboard metrics."""
-    user = get_current_user(request)
+    _user = get_current_user(request)
 
     # Dashboard config — runtime-tunable via Statsig
     _dash = statsig_client.get_config("dashboard")

@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 
 from shared.models import (
     Base, Regulation, ComplianceGap, ComplianceRuleUrl, ScrapedContent,
-    Communication, Tenant, PipelineLog, PipelineRun, AdminNotification,
+    Tenant, PipelineRun, AdminNotification,
     RegulationStatus, GapSeverity, GapStatus, AffectedLayer,
-    CommunicationStatus, CommunicationType, PipelineRunType, PipelineRunStatus,
-    NotificationType, SystemConfig,
+    PipelineRunType, PipelineRunStatus,
+    NotificationType, ExecReport,
 )
 from shared.auth import CurrentUser
 
@@ -248,3 +248,70 @@ async def seed_gaps(db_session, seed_scraped_content, seed_regulation):
 
     await db_session.flush()
     return gaps
+
+
+@pytest_asyncio.fixture
+async def seed_tenant(db_session):
+    """Create and return a Tenant."""
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        name="Sunrise PACE",
+        descope_tenant_id="tenant-001",
+        is_active=True,
+    )
+    db_session.add(tenant)
+    await db_session.flush()
+    return tenant
+
+
+@pytest_asyncio.fixture
+async def seed_pipeline_run(db_session):
+    """Create and return a completed PipelineRun."""
+    run = PipelineRun(
+        id=uuid.uuid4(),
+        run_type=PipelineRunType.ANALYSIS,
+        status=PipelineRunStatus.COMPLETED,
+        started_at=datetime.utcnow() - timedelta(minutes=5),
+        ended_at=datetime.utcnow(),
+        duration_seconds=300.0,
+        regulations_added=5,
+        gaps_added=3,
+    )
+    db_session.add(run)
+    await db_session.flush()
+    return run
+
+
+@pytest_asyncio.fixture
+async def seed_notification(db_session, seed_pipeline_run):
+    """Create and return an AdminNotification."""
+    notif = AdminNotification(
+        id=uuid.uuid4(),
+        pipeline_run_id=seed_pipeline_run.id,
+        notification_type=NotificationType.PIPELINE_COMPLETED,
+        title="Analysis Complete",
+        message="Pipeline run completed with 5 regulations and 3 gaps.",
+        is_read=False,
+    )
+    db_session.add(notif)
+    await db_session.flush()
+    return notif
+
+
+@pytest_asyncio.fixture
+async def seed_exec_report(db_session):
+    """Create and return an ExecReport."""
+    report = ExecReport(
+        id=uuid.uuid4(),
+        week_start=date.today() - timedelta(days=7),
+        week_end=date.today() - timedelta(days=1),
+        summary_html="<h1>Weekly Report</h1><p>5 new regulations, 3 gaps resolved.</p>",
+        summary_plain="Weekly Report: 5 new regulations, 3 gaps resolved.",
+        metrics={"new_regulations": 5, "gaps_identified": 8, "gaps_resolved": 3},
+        risks=[{"title": "FHIR deadline", "severity": "high"}],
+        highlights=["Resolved IDT gap", "Completed enrollment audit"],
+    )
+    db_session.add(report)
+    await db_session.flush()
+    return report
+

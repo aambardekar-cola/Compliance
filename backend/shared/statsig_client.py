@@ -1,10 +1,11 @@
-from __future__ import annotations
 """Statsig SDK wrapper with graceful fallback.
 
 Provides helpers for feature gates, dynamic configs, and experiments.
 If Statsig is unreachable or not configured, all methods return hardcoded
 defaults so the app continues working without Statsig.
 """
+from __future__ import annotations
+
 import logging
 import os
 

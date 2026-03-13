@@ -3,6 +3,9 @@ import os
 import pytest
 from unittest.mock import MagicMock, patch
 
+# Skip entire module if boto3 is not installed (analysis.handler imports boto3 at module level)
+pytest.importorskip("boto3")
+
 # Set a dummy AWS region before importing the handler (which initializes boto3 clients)
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 

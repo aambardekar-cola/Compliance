@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from backend.scripts.seed_urls import seed_data, SEED_URLS
+from scripts.seed_urls import seed_data, SEED_URLS
 
 @pytest.mark.asyncio
 async def test_seed_urls_idempotency():
@@ -16,7 +16,7 @@ async def test_seed_urls_idempotency():
     
     mock_session.execute.return_value = mock_result
     
-    with patch("backend.scripts.seed_urls.get_db_session") as mock_get_db:
+    with patch("scripts.seed_urls.get_db_session") as mock_get_db:
         mock_get_db.return_value.__aenter__.return_value = mock_session
         
         await seed_data()
@@ -36,7 +36,7 @@ async def test_seed_urls_error_handling():
     mock_session = AsyncMock()
     mock_session.execute.side_effect = Exception("DB Error")
     
-    with patch("backend.scripts.seed_urls.get_db_session") as mock_get_db:
+    with patch("scripts.seed_urls.get_db_session") as mock_get_db:
         mock_get_db.return_value.__aenter__.return_value = mock_session
         
         with pytest.raises(Exception, match="DB Error"):
