@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
 from shared.models import (
-    Regulation, ComplianceGap, Communication,
+    Regulation, ComplianceGap, Communication, Tenant,
     RegulationStatus, GapSeverity, GapStatus, CommunicationStatus,
 )
 from shared import statsig_client
@@ -66,7 +66,7 @@ async def get_dashboard(
 
     # Filter by tenant for client users
     if not user.is_internal and user.tenant_id:
-        from shared.models import Tenant
+
         tenant_result = await db.execute(
             select(Tenant.id).where(Tenant.descope_tenant_id == user.tenant_id)
         )

@@ -18,20 +18,6 @@ _session_factory = None
 
 
 
-
-def _build_database_url() -> str:
-    """Build the database URL from config or AWS Secrets Manager."""
-    settings = get_settings()
-
-    if settings.is_production and settings.db_secret_arn:
-        # In production, fetch credentials from Secrets Manager (non-blocking)
-        # Note: Depending on event loop state, a synchronous call here
-        # is dangerous. We will return the database URL directly but we should
-        # use asyncio.to_thread in get_engine calling this instead.
-        pass
-    return settings.database_url
-
-
 async def _get_secret_database_url(settings) -> str:
     """Async wrapper to fetch DB credentials from Secrets Manager."""
     def fetch_secret():

@@ -58,12 +58,19 @@ async def seed_data():
     async with get_db_session() as session:
         print("Starting seed of ComplianceRuleUrl...")
         for item in SEED_URLS:
-            stmt = select(ComplianceRuleUrl).where(ComplianceRuleUrl.url == item["url"])
+            # Match by name (not URL) to prevent duplicates when URLs change
+            stmt = select(ComplianceRuleUrl).where(ComplianceRuleUrl.name == item["name"])
             result = await session.execute(stmt)
             existing = result.scalars().first()
             
             if existing:
-                print(f"Skipping already seeded URL: {item['url']}")
+                # Update URL if it changed
+                if existing.url != item["url"]:
+                    existing.url = item["url"]
+                    existing.description = item["description"]
+                    print(f"Updated URL for: {item['name']}")
+                else:
+                    print(f"Skipping already seeded: {item['name']}")
                 continue
                 
             rule = ComplianceRuleUrl(

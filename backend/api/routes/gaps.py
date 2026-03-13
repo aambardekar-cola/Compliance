@@ -78,13 +78,29 @@ async def list_gaps(
     result = await db.execute(query)
     gaps = result.scalars().all()
 
+    # Get total severity summary (across all data, not just current page)
+    severity_subquery = (
+        select(
+            ComplianceGap.severity,
+            func.count(ComplianceGap.id).label("count"),
+        )
+        .select_from(query.subquery())
+        .group_by(ComplianceGap.severity)
+    )
+    severity_result = await db.execute(severity_subquery)
+    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for row in severity_result.all():
+        sev_value = row.severity.value if row.severity else "low"
+        if sev_value in severity_counts:
+            severity_counts[sev_value] = row.count
+
     return {
         "items": [_serialize_gap(g) for g in gaps],
         "total": total,
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
-        "severity_summary": _count_severities(gaps),
+        "severity_summary": severity_counts,
     }
 
 

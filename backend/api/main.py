@@ -1,6 +1,7 @@
 """FastAPI application entry point with Mangum handler for AWS Lambda."""
 import logging
 import os
+from contextlib import asynccontextmanager
 
 # Datadog APM — auto-instrument FastAPI, SQLAlchemy, httpx at import time
 if os.environ.get("DD_TRACE_ENABLED") == "true":
@@ -18,25 +19,26 @@ from shared import statsig_client
 from api.middleware.auth import AuthMiddleware
 from api.routes import dashboard, regulations, gaps, communications, reports, subscriptions, admin, notifications, system_config
 
-from starlette.middleware.base import BaseHTTPMiddleware
-
-class DebugMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        try:
-            return await call_next(request)
-        except Exception:
-            import traceback
-            from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=500, content={"detail": "CRASH", "trace": traceback.format_exc()})
-
 # ---- Logging ----
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---- FastAPI App ----
-# Statsig — init at cold start to fetch feature gates + configs
-statsig_client.initialize()
 
+# ---- Lifespan ----
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup/shutdown lifecycle."""
+    # Startup
+    logger.info("Starting PaceCareOnline Compliance API")
+    statsig_client.initialize()
+    yield
+    # Shutdown
+    await close_db()
+    statsig_client.shutdown()
+    logger.info("Shutting down PaceCareOnline Compliance API")
+
+
+# ---- FastAPI App ----
 # Determine if API docs should be shown (Statsig gate overrides env check)
 _show_docs = statsig_client.check_gate("api_docs_enabled") or not get_settings().is_production
 
@@ -44,12 +46,12 @@ app = FastAPI(
     title="PaceCareOnline Compliance Intelligence API",
     description="AI-powered compliance monitoring for PACE Market EHR",
     version="1.0.0",
+    lifespan=lifespan,
     docs_url="/api/docs" if _show_docs else None,
     redoc_url="/api/redoc" if _show_docs else None,
 )
 
 # ---- Auth Middleware ----
-app.add_middleware(DebugMiddleware)
 app.add_middleware(AuthMiddleware)
 
 # ---- CORS ----
@@ -82,23 +84,10 @@ app.include_router(notifications.router, prefix="/admin", tags=["Notifications"]
 app.include_router(system_config.router, prefix="/admin", tags=["System Config"])
 
 
-# ---- Lifecycle Events ----
-@app.on_event("startup")
-async def startup():
-    logger.info("Starting PaceCareOnline Compliance API")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    await close_db()
-    statsig_client.shutdown()
-    logger.info("Shutting down PaceCareOnline Compliance API")
-
-
 # ---- Health Check (no auth) ----
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy", "service": "pco-compliance-api", "version": "1.0.1+debug"}
+    return {"status": "healthy", "service": "pco-compliance-api", "version": "1.0.2"}
 
 
 # ---- Error Handlers ----
@@ -112,4 +101,4 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ---- Lambda Handler ----
-handler = Mangum(app, lifespan="off")
+handler = Mangum(app, lifespan="auto")

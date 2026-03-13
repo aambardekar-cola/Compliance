@@ -95,7 +95,7 @@ class ApiStack(cdk.Stack):
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=lambda_.Architecture.ARM_64,
             memory_size=512,
-            timeout=Duration.seconds(30),
+            timeout=Duration.seconds(60),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -134,25 +134,29 @@ class ApiStack(cdk.Stack):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-                resources=["arn:aws:bedrock:*::foundation-model/*"],
+                resources=[f"arn:aws:bedrock:{cdk.Stack.of(self).region}::foundation-model/*"],
             )
         )
 
-        # Lambda Invoke permissions (to trigger scraper)
+        # Lambda Invoke permissions (to trigger scraper) — scoped to pco-compliance-*
         self.api_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["lambda:InvokeFunction", "lambda:ListFunctions"],
-                resources=["*"], # Narrower scope usually better, but names are dynamic with CDK
+                resources=[
+                    f"arn:aws:lambda:{cdk.Stack.of(self).region}:{cdk.Stack.of(self).account}:function:pco-compliance-*",
+                ],
             )
         )
 
-        # CloudWatch Logs permissions (to read logs via API)
+        # CloudWatch Logs permissions — scoped to pco-compliance-* log groups
         self.api_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogStreams"],
-                resources=["*"],
+                resources=[
+                    f"arn:aws:logs:{cdk.Stack.of(self).region}:{cdk.Stack.of(self).account}:log-group:/aws/lambda/pco-compliance-*",
+                ],
             )
         )
 
@@ -177,16 +181,6 @@ class ApiStack(cdk.Stack):
         health.add_method(
             "GET",
             apigw.LambdaIntegration(self.api_lambda),
-        )
-
-        # ---- Force New Deployment ----
-        # API Gateway is caching a ghost OPTIONS method from a previous deployment.
-        # Adding this dummy resource alters the CDK Deployment hash, explicitly forcing
-        # a new AWS::ApiGateway::Deployment to be generated and bound to the live Stage,
-        # which will wipe out the rogue OPTIONS mock integrations.
-        self.api.root.add_resource("force_deploy_1").add_method(
-            "GET",
-            apigw.LambdaIntegration(self.api_lambda)
         )
 
         self.api_url = self.api.url

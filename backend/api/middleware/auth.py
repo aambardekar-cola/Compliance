@@ -2,7 +2,7 @@
 import logging
 import os
 
-from fastapi import Request, Depends
+from fastapi import Request, Depends, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -17,6 +17,26 @@ PUBLIC_PATHS = {
     "/api/docs",
     "/api/redoc",
     "/api/openapi.json",
+}
+
+# Module-level mock user definitions (avoids recreating on every request)
+MOCK_USERS = {
+    "mock-admin-token": CurrentUser(
+        user_id="mock-admin-123", email="admin@collabrios.com", name="Sarah Mitchell",
+        tenant_id=None, tenant_name=None, roles=["internal_admin"], permissions=[]
+    ),
+    "mock-internal-token": CurrentUser(
+        user_id="mock-internal-456", email="dev@collabrios.com", name="James Reeves",
+        tenant_id=None, tenant_name=None, roles=["internal_user"], permissions=[]
+    ),
+    "mock-client-admin-token": CurrentUser(
+        user_id="mock-client-789", email="admin@sunrisepace.org", name="Maria Santos",
+        tenant_id="tenant-custom-001", tenant_name="Sunrise PACE", roles=["client_admin"], permissions=[]
+    ),
+    "mock-client-user-token": CurrentUser(
+        user_id="mock-client-abc", email="nurse@sunrisepace.org", name="David Chen",
+        tenant_id="tenant-custom-001", tenant_name="Sunrise PACE", roles=["client_user"], permissions=[]
+    ),
 }
 
 
@@ -45,36 +65,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or os.environ.get("MOCK_AUTH_ENABLED", "").lower() == "true"
         )
 
-        mock_users = {
-            "mock-admin-token": CurrentUser(
-                user_id="mock-admin-123", email="admin@collabrios.com", name="Sarah Mitchell",
-                tenant_id=None, tenant_name=None, roles=["internal_admin"], permissions=[]
-            ),
-            "mock-internal-token": CurrentUser(
-                user_id="mock-internal-456", email="dev@collabrios.com", name="James Reeves",
-                tenant_id=None, tenant_name=None, roles=["internal_user"], permissions=[]
-            ),
-            "mock-client-admin-token": CurrentUser(
-                user_id="mock-client-789", email="admin@sunrisepace.org", name="Maria Santos",
-                tenant_id="tenant-custom-001", tenant_name="Sunrise PACE", roles=["client_admin"], permissions=[]
-            ),
-            "mock-client-user-token": CurrentUser(
-                user_id="mock-client-abc", email="nurse@sunrisepace.org", name="David Chen",
-                tenant_id="tenant-custom-001", tenant_name="Sunrise PACE", roles=["client_user"], permissions=[]
-            ),
-        }
-
-        if mock_auth_enabled and token in mock_users:
-            request.state.user = mock_users[token]
+        if mock_auth_enabled and token in MOCK_USERS:
+            logger.info("Mock auth bypass: user=%s path=%s", MOCK_USERS[token].email, request.url.path)
+            request.state.user = MOCK_USERS[token]
             return await call_next(request)
 
         # --- Real Descope Auth ---
         try:
             user = validate_token(token)
-            # Attach user to request state for use in route handlers
             request.state.user = user
         except Exception as e:
-            logger.warning(f"Auth failed for {request.url.path}: {e}")
+            logger.warning("Auth failed for %s: %s", request.url.path, e)
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Invalid or expired token"},
@@ -93,7 +94,7 @@ def get_current_user(request: Request) -> CurrentUser:
     """
     user = getattr(request.state, "user", None)
     if user is None:
-        raise Exception("User not found in request state")
+        raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
 
@@ -104,9 +105,8 @@ def require_role(roles: list[str]):
         roles_list = roles if isinstance(roles, list) else [roles]
         # Convert provided roles to their string values if they are Enums
         allowed_roles = [r.value if hasattr(r, "value") else str(r) for r in roles_list]
-        print(f"DEBUG: user.roles={user.roles}, allowed_roles={allowed_roles}")
+        logger.debug("Role check: user.roles=%s, allowed_roles=%s", user.roles, allowed_roles)
         if not any(role in user.roles for role in allowed_roles):
-            from fastapi import HTTPException
             raise HTTPException(status_code=403, detail="Not enough permissions")
         return user
     return role_dependency
