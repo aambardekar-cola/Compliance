@@ -152,19 +152,48 @@ def _fallback_report(metrics: Dict, week_start: datetime, week_end: datetime) ->
 
 
 def _get_recipients() -> List[str]:
-    """Get report recipients from environment or config."""
-    env_recipients = os.environ.get("REPORT_RECIPIENTS", "")
+    """Get report recipients from environment (sync fallback)."""
+    from shared import statsig_client
+    default = statsig_client.get_config("reporting", "default_recipients", "")
+    env_recipients = os.environ.get("REPORT_RECIPIENTS", default)
     if env_recipients:
         return [r.strip() for r in env_recipients.split(",") if r.strip()]
     return []
+
+
+async def get_recipients(db=None) -> List[str]:
+    """Get report recipients — DB first, then env var fallback.
+
+    Args:
+        db: Optional async DB session. If provided, checks SystemConfig first.
+    """
+    if db is not None:
+        try:
+            from sqlalchemy import select
+            from shared.models import SystemConfig
+
+            result = await db.execute(
+                select(SystemConfig).where(SystemConfig.key == "report_recipients")
+            )
+            config = result.scalar_one_or_none()
+            if config and config.value:
+                return config.value
+        except Exception:
+            logger.warning("Failed to read recipients from DB, falling back to env var")
+
+    return _get_recipients()
 
 
 async def _send_report_email(report: ExecReport, recipients: List[str]) -> None:
     """Send the report via SES."""
     try:
         import boto3
+        from shared import statsig_client
+
         ses = boto3.client("ses", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-        from_email = os.environ.get("SES_FROM_EMAIL", "compliance@collabrios.com")
+        from_email = statsig_client.get_config(
+            "reporting", "ses_from_email", "compliance@collabrios.com",
+        )
 
         ses.send_email(
             Source=from_email,

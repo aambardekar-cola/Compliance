@@ -1,12 +1,16 @@
 """Reports API routes — executive summary reports and compliance scoring."""
+from __future__ import annotations
+
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
 from shared.models import ExecReport
+from shared import statsig_client
 from api.middleware.auth import get_current_user
 from reporting.scoring import compute_module_scores, compute_overall_score
 
@@ -93,6 +97,62 @@ async def get_compliance_scores(
     }
 
 
+@router.get("/reports/trends")
+async def get_report_trends(
+    request: Request,
+    db: AsyncSession = Depends(get_session_dependency),
+    weeks: int = Query(None, ge=1, le=52),
+):
+    """Get historical compliance trends from past reports.
+
+    Returns time-series data for charting: scores, gaps identified/resolved.
+    """
+    user = get_current_user(request)
+
+    if not user.is_internal:
+        raise HTTPException(403, "Compliance trends are internal only")
+
+    if weeks is None:
+        weeks = statsig_client.get_config("reporting", "trend_weeks", 12)
+
+    cutoff = datetime.utcnow() - timedelta(weeks=weeks)
+
+    result = await db.execute(
+        select(ExecReport)
+        .where(ExecReport.week_start >= cutoff.date())
+        .order_by(ExecReport.week_start)
+    )
+    reports = result.scalars().all()
+
+    labels = []
+    overall_scores = []
+    gaps_identified = []
+    gaps_resolved = []
+    module_scores_series: dict = {}
+
+    for r in reports:
+        labels.append(r.week_start.isoformat())
+        metrics = r.metrics or {}
+        overall_scores.append(metrics.get("compliance_score", 0))
+        gaps_identified.append(metrics.get("gaps_identified", 0))
+        gaps_resolved.append(metrics.get("gaps_resolved", 0))
+
+        # Per-module scores from the metrics snapshot
+        for mod, score in metrics.get("module_scores", {}).items():
+            if mod not in module_scores_series:
+                module_scores_series[mod] = []
+            module_scores_series[mod].append(score)
+
+    return {
+        "labels": labels,
+        "overall_score": overall_scores,
+        "module_scores": module_scores_series,
+        "gaps_identified": gaps_identified,
+        "gaps_resolved": gaps_resolved,
+        "weeks": weeks,
+    }
+
+
 @router.get("/reports/{report_id}")
 async def get_report(
     report_id: UUID,
@@ -137,3 +197,4 @@ def _serialize_report(report: ExecReport, detailed: bool = False) -> dict:
         })
 
     return data
+

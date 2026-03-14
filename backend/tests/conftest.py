@@ -337,3 +337,46 @@ async def seed_gaps_for_scoring(db_session, seed_scraped_content):
     return gaps
 
 
+@pytest_asyncio.fixture
+async def seed_exec_reports_for_trends(db_session):
+    """Create 3 weekly ExecReports with module_scores for trend testing."""
+    reports = []
+    for i in range(3):
+        week_offset = (3 - i) * 7
+        report = ExecReport(
+            id=uuid.uuid4(),
+            week_start=date.today() - timedelta(days=week_offset + 7),
+            week_end=date.today() - timedelta(days=week_offset),
+            summary_html=f"<p>Report {i + 1}</p>",
+            summary_plain=f"Report {i + 1}",
+            metrics={
+                "new_regulations": (i + 1) * 2,
+                "gaps_identified": 10 - i * 2,
+                "gaps_resolved": 5 + i,
+                "compliance_score": 70 + i * 10,
+                "module_scores": {
+                    "Pharmacy": 60 + i * 10,
+                    "IDT": 80 + i * 5,
+                },
+            },
+            risks=[],
+            highlights=[],
+        )
+        db_session.add(report)
+        reports.append(report)
+    await db_session.flush()
+    return reports
+
+
+@pytest_asyncio.fixture
+async def seed_system_config_recipients(db_session):
+    """Create a SystemConfig entry for report_recipients."""
+    from shared.models import SystemConfig
+    config = SystemConfig(
+        key="report_recipients",
+        value=["admin@test.com", "ceo@test.com"],
+        description="Test recipients",
+    )
+    db_session.add(config)
+    await db_session.flush()
+    return config

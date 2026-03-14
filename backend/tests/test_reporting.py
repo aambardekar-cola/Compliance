@@ -105,10 +105,11 @@ async def test_fallback_report():
 
 
 def test_get_recipients_empty():
-    """No REPORT_RECIPIENTS env var → empty list."""
+    """No REPORT_RECIPIENTS env var and no Statsig default → empty list."""
     from reporting.handler import _get_recipients
 
-    with patch.dict("os.environ", {}, clear=True):
+    with patch("shared.statsig_client.get_config", return_value=""), \
+         patch.dict("os.environ", {}, clear=True):
         assert _get_recipients() == []
 
 

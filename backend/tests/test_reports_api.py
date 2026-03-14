@@ -106,7 +106,9 @@ class TestAdminReportEndpoints:
         assert resp.status_code == 404
 
     async def test_send_report_no_recipients(self, client: AsyncClient, seed_exec_report):
-        resp = await client.post(f"/admin/reports/{seed_exec_report.id}/send")
+        from unittest.mock import patch
+        with patch("shared.statsig_client.get_config", return_value=""):
+            resp = await client.post(f"/admin/reports/{seed_exec_report.id}/send")
         assert resp.status_code == 400
         assert "recipients" in resp.json()["detail"].lower()
 
@@ -129,3 +131,112 @@ class TestReportsRoleRestrictions:
         resp = await client_user.get("/reports/scores")
         assert resp.status_code == 403
 
+
+class TestReportTrends:
+    async def test_trends_empty(self, client: AsyncClient):
+        resp = await client.get("/reports/trends")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["labels"] == []
+        assert body["overall_score"] == []
+        assert body["gaps_identified"] == []
+        assert body["gaps_resolved"] == []
+        assert body["module_scores"] == {}
+
+    async def test_trends_with_data(
+        self, client: AsyncClient, seed_exec_reports_for_trends,
+    ):
+        resp = await client.get("/reports/trends")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["labels"]) == 3
+        assert len(body["overall_score"]) == 3
+        # Scores are ascending: 70, 80, 90
+        assert body["overall_score"] == [70, 80, 90]
+        assert "Pharmacy" in body["module_scores"]
+        assert "IDT" in body["module_scores"]
+        assert len(body["module_scores"]["Pharmacy"]) == 3
+
+    async def test_trends_custom_weeks(
+        self, client: AsyncClient, seed_exec_reports_for_trends,
+    ):
+        resp = await client.get("/reports/trends?weeks=1")
+        assert resp.status_code == 200
+        body = resp.json()
+        # Only the most recent report within last 1 week
+        assert len(body["labels"]) <= 1
+
+    async def test_trends_client_forbidden(self, client_user: AsyncClient):
+        resp = await client_user.get("/reports/trends")
+        assert resp.status_code == 403
+
+
+class TestReportRecipients:
+    async def test_get_recipients_empty(self, client: AsyncClient):
+        from unittest.mock import patch
+        with patch("shared.statsig_client.get_config", return_value=""):
+            resp = await client.get("/admin/reports/recipients")
+        assert resp.status_code == 200
+        assert resp.json()["emails"] == []
+
+    async def test_get_recipients_from_db(
+        self, client: AsyncClient, seed_system_config_recipients,
+    ):
+        resp = await client.get("/admin/reports/recipients")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert set(body["emails"]) == {"admin@test.com", "ceo@test.com"}
+
+    async def test_update_recipients(self, client: AsyncClient):
+        # PUT new recipients
+        resp = await client.put(
+            "/admin/reports/recipients",
+            json={"emails": ["a@test.com", "b@test.com"]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 2
+
+        # GET should reflect the updated list
+        resp2 = await client.get("/admin/reports/recipients")
+        assert set(resp2.json()["emails"]) == {"a@test.com", "b@test.com"}
+
+    async def test_update_recipients_overwrite(self, client: AsyncClient):
+        # First set
+        await client.put(
+            "/admin/reports/recipients",
+            json={"emails": ["first@test.com"]},
+        )
+        # Overwrite
+        resp = await client.put(
+            "/admin/reports/recipients",
+            json={"emails": ["second@test.com"]},
+        )
+        assert resp.status_code == 200
+        resp2 = await client.get("/admin/reports/recipients")
+        assert resp2.json()["emails"] == ["second@test.com"]
+
+    async def test_update_invalid_email(self, client: AsyncClient):
+        resp = await client.put(
+            "/admin/reports/recipients",
+            json={"emails": ["not-an-email"]},
+        )
+        assert resp.status_code == 422
+
+    async def test_recipients_admin_only(self, client_user: AsyncClient):
+        resp = await client_user.get("/admin/reports/recipients")
+        assert resp.status_code == 403
+        resp2 = await client_user.put(
+            "/admin/reports/recipients",
+            json={"emails": ["x@test.com"]},
+        )
+        assert resp2.status_code == 403
+
+
+class TestCustomDateRangeGeneration:
+    async def test_generate_with_date_range_validation(self, client: AsyncClient):
+        """POST with invalid dates returns 400."""
+        resp = await client.post(
+            "/admin/reports/generate",
+            json={"week_start": "not-a-date", "week_end": "2026-01-14"},
+        )
+        assert resp.status_code == 400

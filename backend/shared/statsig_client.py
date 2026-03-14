@@ -137,6 +137,13 @@ _CONFIG_DEFAULTS: dict[str, dict] = {
         "rum_replay_sample_rate": 20,
         "rum_privacy_level": "mask-user-input",
     },
+    "reporting": {
+        "trend_weeks": 12,
+        "default_range_weeks": 4,
+        "max_recipients": 20,
+        "ses_from_email": "pco-compliance@collabrios.com",
+        "default_recipients": "aambardekar@collabrios.com",
+    },
 }
 
 

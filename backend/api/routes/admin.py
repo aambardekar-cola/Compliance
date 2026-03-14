@@ -1,14 +1,19 @@
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import re
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db import get_session_dependency
-from shared.models import ComplianceRuleUrl, ScrapedContent, ComplianceGap, Regulation, PipelineLog, UserRole
+from shared.models import (
+    ComplianceRuleUrl, ScrapedContent, ComplianceGap, Regulation,
+    PipelineLog, UserRole, SystemConfig,
+)
+from shared import statsig_client
 from api.middleware.auth import require_role
 import importlib
 import traceback
@@ -28,6 +33,31 @@ class ComplianceUrlBase(BaseModel):
 
 class ComplianceUrlCreate(ComplianceUrlBase):
     pass
+
+
+class GenerateReportRequest(BaseModel):
+    """Optional custom date range for report generation."""
+    week_start: Optional[str] = None  # ISO date string
+    week_end: Optional[str] = None    # ISO date string
+
+
+class RecipientsUpdate(BaseModel):
+    """Payload for updating report recipients."""
+    emails: List[str]
+
+    @field_validator("emails", mode="before")
+    @classmethod
+    def validate_emails(cls, v):  # noqa: N805
+        max_recipients = statsig_client.get_config(
+            "reporting", "max_recipients", 20,
+        )
+        if len(v) > max_recipients:
+            raise ValueError(f"Maximum {max_recipients} recipients allowed")
+        pattern = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+        for email in v:
+            if not pattern.match(email.strip()):
+                raise ValueError(f"Invalid email: {email}")
+        return [e.strip() for e in v]
 
 class ComplianceUrlUpdate(ComplianceUrlBase):
     name: Optional[str] = None
@@ -302,12 +332,23 @@ async def reset_data_and_rescrape(session: AsyncSession = Depends(get_session_de
 @router.post("/reports/generate")
 async def generate_report(
     request=Depends(require_role(UserRole.INTERNAL_ADMIN)),
+    db: AsyncSession = Depends(get_session_dependency),
+    body: GenerateReportRequest = None,
 ):
-    """Manually trigger executive report generation."""
+    """Manually trigger executive report generation with optional date range."""
     from reporting.handler import generate_report as run_generate
 
+    kwargs: Dict[str, Any] = {"send_email": False}
+
+    if body and body.week_start and body.week_end:
+        try:
+            kwargs["week_start"] = datetime.fromisoformat(body.week_start)
+            kwargs["week_end"] = datetime.fromisoformat(body.week_end)
+        except ValueError:
+            raise HTTPException(400, "Invalid date format. Use ISO 8601 (YYYY-MM-DD)")
+
     try:
-        result = await run_generate(send_email=False)
+        result = await run_generate(**kwargs)
         return {"status": "ok", "report": result}
     except Exception as e:
         raise HTTPException(500, f"Report generation failed: {e}")
@@ -321,7 +362,7 @@ async def send_report(
 ):
     """Send an existing report via SES email."""
     from shared.models import ExecReport
-    from reporting.handler import _send_report_email, _get_recipients
+    from reporting.handler import _send_report_email, get_recipients
 
     result = await db.execute(
         select(ExecReport).where(ExecReport.id == report_id)
@@ -330,9 +371,12 @@ async def send_report(
     if not report:
         raise HTTPException(404, "Report not found")
 
-    recipients = _get_recipients()
+    recipients = await get_recipients(db)
     if not recipients:
-        raise HTTPException(400, "No recipients configured. Set REPORT_RECIPIENTS env var.")
+        raise HTTPException(
+            400,
+            "No recipients configured. Add recipients via Admin > Email Settings.",
+        )
 
     await _send_report_email(report, recipients)
     report.sent_to = recipients
@@ -340,4 +384,57 @@ async def send_report(
     await db.commit()
 
     return {"status": "sent", "recipients": recipients}
+
+
+# ---- Report Recipients ----
+
+RECIPIENTS_CONFIG_KEY = "report_recipients"
+
+
+@router.get("/reports/recipients")
+async def get_report_recipients(
+    request=Depends(require_role(UserRole.INTERNAL_ADMIN)),
+    db: AsyncSession = Depends(get_session_dependency),
+):
+    """Get configured report email recipients."""
+    result = await db.execute(
+        select(SystemConfig).where(SystemConfig.key == RECIPIENTS_CONFIG_KEY)
+    )
+    config = result.scalar_one_or_none()
+
+    if config and config.value:
+        return {"emails": config.value}
+
+    # Fallback to env var (with Statsig defaults)
+    default = statsig_client.get_config("reporting", "default_recipients", "")
+    env_val = os.environ.get("REPORT_RECIPIENTS", default)
+    emails = [e.strip() for e in env_val.split(",") if e.strip()] if env_val else []
+    return {"emails": emails}
+
+
+@router.put("/reports/recipients")
+async def update_report_recipients(
+    body: RecipientsUpdate,
+    request=Depends(require_role(UserRole.INTERNAL_ADMIN)),
+    db: AsyncSession = Depends(get_session_dependency),
+):
+    """Update report email recipients (stored in SystemConfig)."""
+    result = await db.execute(
+        select(SystemConfig).where(SystemConfig.key == RECIPIENTS_CONFIG_KEY)
+    )
+    config = result.scalar_one_or_none()
+
+    if config:
+        config.value = body.emails
+    else:
+        config = SystemConfig(
+            key=RECIPIENTS_CONFIG_KEY,
+            value=body.emails,
+            description="Email recipients for executive compliance reports",
+        )
+        db.add(config)
+
+    await db.commit()
+    return {"emails": body.emails, "count": len(body.emails)}
+
 

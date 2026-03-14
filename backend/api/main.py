@@ -31,6 +31,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting PaceCareOnline Compliance API")
     statsig_client.initialize()
+
+    # Initialize DB schema for local/dev (SQLite — create_all is idempotent).
+    # In production (PostgreSQL), schema is managed by migrations.
+    settings = get_settings()
+    if not settings.is_production:
+        from shared.db import init_db
+        await init_db()
+
     yield
     # Shutdown
     await close_db()

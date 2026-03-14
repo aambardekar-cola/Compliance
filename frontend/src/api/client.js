@@ -82,12 +82,35 @@ class ApiClient {
         return this.request('/reports/scores');
     }
 
-    generateReport() {
-        return this.request('/admin/reports/generate', { method: 'POST' });
+    getTrends(weeks) {
+        const query = weeks ? `?weeks=${weeks}` : '';
+        return this.request(`/reports/trends${query}`);
+    }
+
+    generateReport(dateRange = null) {
+        const options = { method: 'POST' };
+        if (dateRange) {
+            options.body = JSON.stringify({
+                week_start: dateRange.weekStart,
+                week_end: dateRange.weekEnd,
+            });
+        }
+        return this.request('/admin/reports/generate', options);
     }
 
     sendReport(id) {
         return this.request(`/admin/reports/${id}/send`, { method: 'POST' });
+    }
+
+    getRecipients() {
+        return this.request('/admin/reports/recipients');
+    }
+
+    updateRecipients(emails) {
+        return this.request('/admin/reports/recipients', {
+            method: 'PUT',
+            body: JSON.stringify({ emails }),
+        });
     }
 
     // Subscriptions
