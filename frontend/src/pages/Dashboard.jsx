@@ -57,6 +57,12 @@ export default function Dashboard() {
         enabled: !!sessionToken,
     });
 
+    const { data: scoresData } = useQuery({
+        queryKey: ['compliance-scores'],
+        queryFn: () => apiClient.getComplianceScores(),
+        enabled: !!sessionToken,
+    });
+
     if (isDashboardLoading || isGapsLoading) {
         return <div className="loading-card"><div className="loading-spinner" /></div>;
     }
@@ -189,23 +195,21 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div className="card">
+                <div className="card" style={{ cursor: 'pointer' }} onClick={() => window.location.href = '/reports'}>
                     <div className="card-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <h2 className="card-title">Exec Reporting</h2>
-                            <PreviewBadge />
+                            <h2 className="card-title">Compliance Score</h2>
                         </div>
                     </div>
                     <div style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
                         <div style={{
                             fontSize: 'var(--font-size-4xl)', fontWeight: 800,
-                            background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
+                            color: (scoresData?.overall_score ?? 0) >= 80 ? 'var(--color-success)' : (scoresData?.overall_score ?? 0) >= 60 ? 'var(--color-warning)' : 'var(--color-danger)',
                         }}>
-                            Phase 3
+                            {scoresData?.overall_score != null ? `${Math.round(scoresData.overall_score)}%` : '—'}
                         </div>
                         <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
-                            Executive dashboards & trend reports coming next
+                            View trend charts &amp; weekly reports &rarr;
                         </p>
                     </div>
                 </div>
